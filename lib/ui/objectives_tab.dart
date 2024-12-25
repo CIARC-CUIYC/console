@@ -6,22 +6,26 @@ import 'package:intl/intl.dart';
 import '../model/objective.dart';
 
 class ObjectivesTab extends StatefulWidget {
-  const ObjectivesTab({super.key});
+  final void Function(ZonedObjective? objective) onHover;
+
+  const ObjectivesTab({super.key, required this.onHover});
 
   @override
   State<StatefulWidget> createState() => _ObjectivesTabState();
 }
 
 class _ObjectivesTabState extends State<ObjectivesTab> {
-  final GroundStationClient groundStationClient = getIt.get();
+  final GroundStationClient _groundStationClient = getIt.get();
   static final DateFormat _dateFormat = DateFormat.MEd("de_DE").add_Hm();
 
   List<Objective>? _objectives;
 
+  Objective? _currentHover;
+
   @override
   void initState() {
     super.initState();
-    groundStationClient.getObjectives().then(
+    _groundStationClient.getObjectives().then(
       (objectives) => setState(() {
         _objectives = objectives;
       }),
@@ -42,12 +46,26 @@ class _ObjectivesTabState extends State<ObjectivesTab> {
     return ListView.separated(
       itemBuilder: (context, index) {
         final objective = objectives[index];
-        return ListTile(
-          textColor: now.isAfter(objective.end) ? Colors.grey : null,
-          leading: Icon(objective is BeaconObjective ? Icons.my_location_outlined : Icons.crop),
-          title: Text(objective.name),
-          subtitle: Text("${_dateFormat.format(objective.start)} - ${_dateFormat.format(objective.end)}"),
-          onTap: () => _showDetailsSheet(objective),
+        return MouseRegion(
+          child: ListTile(
+            textColor: now.isAfter(objective.end) ? Colors.grey : null,
+            leading: Icon(objective is BeaconObjective ? Icons.my_location_outlined : Icons.crop),
+            title: Text(objective.name),
+            subtitle: Text("${_dateFormat.format(objective.start)} - ${_dateFormat.format(objective.end)}"),
+            onTap: () => _showDetailsSheet(objective),
+          ),
+          onEnter: (value) {
+            if (objective is ZonedObjective) {
+              _currentHover = objective;
+              widget.onHover(objective);
+            }
+          },
+          onExit: (value) {
+            if (_currentHover == objective) {
+              _currentHover = null;
+              widget.onHover(null);
+            }
+          },
         );
       },
       separatorBuilder: (context, index) => Divider(indent: 5),
@@ -58,7 +76,6 @@ class _ObjectivesTabState extends State<ObjectivesTab> {
   void _showDetailsSheet(Objective objective) {
     showModalBottomSheet(
       context: context,
-
       builder:
           (context) => Padding(
             padding: EdgeInsets.all(10),

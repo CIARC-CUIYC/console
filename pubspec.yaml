@@ -11,8 +11,10 @@ dependencies:
   flutter:
     sdk: flutter
   http: ^1.2.2
+  zoom_widget: ^2.0.1
   get_it: ^8.0.3
   injectable: ^2.5.0
+  intl: any
 
 dev_dependencies:
   flutter_test:
@@ -20,8 +22,9 @@ dev_dependencies:
   flutter_lints: ^5.0.0
   build_runner: ^2.4.14
   injectable_generator: ^2.6.2
-  intl: any
 
 
 flutter:
   uses-material-design: true
+  assets:
+    - assets/map.jpg

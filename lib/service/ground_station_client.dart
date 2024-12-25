@@ -1,7 +1,10 @@
 import 'dart:async';
 import 'dart:convert';
+import 'package:ciarc_console/model/common.dart';
 import 'package:ciarc_console/model/melvin_message.dart';
 import 'package:ciarc_console/model/objective.dart';
+import 'package:ciarc_console/model/telemetry.dart';
+import 'package:flutter/painting.dart';
 import 'package:http/http.dart' as http;
 import 'package:injectable/injectable.dart';
 
@@ -17,6 +20,7 @@ class GroundStationClient {
   static const String achievementsUrl = "$baseUrl/achievements";
   static const String objectivesUrl = "$baseUrl/objective";
   static const String announcementsUrl = "$baseUrl/announcements";
+  static const String observationUrl = "$baseUrl/observation";
 
   final List<AnnouncementListener> _announcementsListeners = [];
   final List<Announcement> _currentAnnouncements = [];
@@ -64,6 +68,26 @@ class GroundStationClient {
     announcementsSseSubscription.cancel();
   }
 
+  Future<Telemetry> getTelemetry() async {
+    final response = await http.get(Uri.parse(observationUrl));
+    if (response.statusCode ~/ 100 != 2) throw Exception("could get telemetry");
+    final Map jsonResponse = const JsonDecoder().convert(response.body);
+    return Telemetry(
+      state: State.values.firstWhere((value) => value == jsonResponse["state"], orElse: () => State.none),
+      position: Offset(jsonResponse["width_x"].toDouble(), jsonResponse["height_y"].toDouble()),
+      velocity: Offset(jsonResponse["vx"].toDouble(), jsonResponse["vy"].toDouble()),
+      battery: jsonResponse["battery"].toDouble(),
+      fuel: jsonResponse["fuel"].toDouble(),
+      dataVolume: (
+        jsonResponse["data_volume"]["data_volume_sent"],
+        jsonResponse["data_volume"]["data_volume_received"],
+      ),
+      distanceCovered: jsonResponse["distance_covered"].toDouble(),
+      objectivesDone: jsonResponse["objectives_done"],
+      objectivesPoints: jsonResponse["objectives_points"],
+    );
+  }
+
   Future<List<Achievement>> getAchievements() async {
     final response = await http.get(Uri.parse(achievementsUrl));
     if (response.statusCode ~/ 100 != 2) throw Exception("could get achievements");
@@ -88,6 +112,14 @@ class GroundStationClient {
     final Map jsonResponse = const JsonDecoder().convert(response.body);
     final zonedObjectivesJson = jsonResponse["zoned_objectives"] as List;
     final beaconObjectivesJson = jsonResponse["beacon_objectives"] as List;
+    dynamic parseZone(dynamic zone) {
+      if (zone is List) {
+        return Rect.fromLTRB(zone[0].toDouble(), zone[1].toDouble(), zone[2].toDouble(), zone[3].toDouble());
+      } else {
+        return zone;
+      }
+    }
+
     final objectives = [
       for (final zonedObjectiveJson in zonedObjectivesJson)
         ZonedObjective(
@@ -97,7 +129,7 @@ class GroundStationClient {
           start: DateTime.parse(zonedObjectiveJson["start"]),
           end: DateTime.parse(zonedObjectiveJson["end"]),
           decreaseRate: zonedObjectiveJson["decrease_rate"],
-          zone: zonedObjectiveJson["zone"],
+          zone: parseZone(zonedObjectiveJson["zone"]),
           coverageRequired: zonedObjectiveJson["coverage_required"],
           opticRequired: CameraAngle.values.firstWhere(
             (value) => value.name == zonedObjectiveJson["optic_required"],

@@ -1,11 +1,18 @@
+import 'package:ciarc_console/model/objective.dart';
+import 'package:ciarc_console/model/telemetry.dart';
+import 'package:ciarc_console/service/ground_station_client.dart';
+import 'package:ciarc_console/ui/achievements_tab.dart';
 import 'package:ciarc_console/ui/announcements_tab.dart';
+import 'package:ciarc_console/ui/control_tab.dart';
 import 'package:ciarc_console/ui/objectives_tab.dart';
+import 'package:ciarc_console/ui/status_panel.dart';
 import 'package:flutter/material.dart';
 import 'package:get_it/get_it.dart';
 import 'package:injectable/injectable.dart';
 import 'main.config.dart';
 import 'package:intl/date_symbol_data_local.dart';
 
+import 'ui/map_widget.dart';
 
 final getIt = GetIt.instance;
 
@@ -18,36 +25,78 @@ Future<void> main() async {
   runApp(const MyApp());
 }
 
-class MyApp extends StatelessWidget {
+class MyApp extends StatefulWidget {
   const MyApp({super.key});
 
-  // This widget is the root of your application.
+  @override
+  State<StatefulWidget> createState() => _MyAppState();
+}
+
+class _MyAppState extends State<MyApp> with SingleTickerProviderStateMixin {
+  late final TabController _tabController;
+  Rect? _highlightedArea;
+  Telemetry? _telemetry;
+
+  @override
+  void initState() {
+    _tabController = TabController(length: 4, vsync: this);
+    getIt.get<GroundStationClient>().getTelemetry().then(
+      (telemetry) => setState(() {
+        _telemetry = telemetry;
+      }),
+    );
+    super.initState();
+  }
+
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Flutter Demo',
-      theme: ThemeData(colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple), useMaterial3: true),
-      home: DefaultTabController(
-        length: 4,
-        child: Scaffold(
-          body: TabBarView(
-            children: [
-              Center(child: Text("Control")),
-              ObjectivesTab(),
-              Center(child: Text("Achievements")),
-              AnnouncementsTab(),
-            ],
+      title: 'CIARC Console',
+      theme: ThemeData(colorScheme: ColorScheme.fromSeed(seedColor: Colors.lightGreen), useMaterial3: true),
+      home: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Expanded(
+            flex: 1,
+            child: Scaffold(body: StatusPanel(telemetry: _telemetry, highlightedArea: _highlightedArea)),
           ),
-          bottomNavigationBar: const TabBar(
-            tabs: [
-              Tab(text: "Control", icon: Icon(Icons.control_camera)),
-              Tab(text: "Objectives", icon: Icon(Icons.radar)),
-              Tab(text: "Achievements", icon: Icon(Icons.leaderboard)),
-              Tab(text: "Announcements", icon: Icon(Icons.newspaper)),
-            ],
+          Expanded(
+            flex: 1,
+            child: Scaffold(
+              body: TabBarView(
+                controller: _tabController,
+                children: [
+                  ControlTab(),
+                  ObjectivesTab(onHover: _onObjectiveHover),
+                  AchievementsTab(),
+                  AnnouncementsTab(),
+                ],
+              ),
+              bottomNavigationBar: TabBar(
+                controller: _tabController,
+                tabs: [
+                  Tab(text: "Control", icon: Icon(Icons.control_camera)),
+                  Tab(text: "Objectives", icon: Icon(Icons.radar)),
+                  Tab(text: "Achievements", icon: Icon(Icons.leaderboard)),
+                  Tab(text: "Announcements", icon: Icon(Icons.newspaper)),
+                ],
+              ),
+            ),
           ),
-        ),
+        ],
       ),
     );
+  }
+
+  void _onObjectiveHover(ZonedObjective? objective) {
+    final zone = objective?.zone;
+    setState(() {
+      if (zone is Rect) {
+        _highlightedArea = zone;
+      } else {
+        _highlightedArea = null;
+      }
+    });
   }
 }

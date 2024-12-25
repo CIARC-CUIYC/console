@@ -1,3 +1,5 @@
+import 'common.dart';
+
 abstract class UpstreamMessage {
   final DateTime timestamp;
 
@@ -19,8 +21,6 @@ class GetCurrentTelemetryMessage extends UpstreamMessage {
 }
 
 enum CameraAngle { narrow, normal, wide }
-
-enum State { deployment, safe, communication, charge, acquisition, transition, none }
 
 class ControlMessage extends UpstreamMessage {
   final (double x, double y)? velocity;
@@ -56,7 +56,7 @@ class TakeImageAtPositionMessage extends UpstreamMessage {
 
 class GetImageAreaMessage extends UpstreamMessage {
   @override
-  bool checkIfObsoletes(UpstreamMessage other) => other is TakeImageImmediateMessage;
+  bool checkIfObsoletes(UpstreamMessage other) => other is GetImageAreaMessage;
 
   @override
   Map serialize() => {};
@@ -65,7 +65,7 @@ class GetImageAreaMessage extends UpstreamMessage {
 
 class SubscribeImageUpdatesMessage extends UpstreamMessage {
   @override
-  bool checkIfObsoletes(UpstreamMessage other) => other is TakeImageImmediateMessage;
+  bool checkIfObsoletes(UpstreamMessage other) => other is SubscribeImageUpdatesMessage;
 
   @override
   Map serialize() => {};
