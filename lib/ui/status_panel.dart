@@ -24,49 +24,56 @@ class StatusPanel extends StatelessWidget {
           ),
         ),
         Container(
-          color: Theme.of(context).cardColor,
+          color: Theme.of(context).focusColor,
           padding: EdgeInsets.all(10),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Expanded(
-                flex: 1,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  mainAxisAlignment: MainAxisAlignment.start,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  spacing: 5,
-                  children: [
-                    _infoLine(Icons.location_on, "Position", telemetry?.position.toString(), "px"),
-                    _infoLine(Icons.double_arrow, "Velocity", telemetry?.velocity.toString(), "px/s"),
-                    _infoLine(Icons.battery_5_bar, "Battery", telemetry?.battery.toString(), "%"),
-                    _infoLine(Icons.local_gas_station, "Fuel", telemetry?.fuel.toString(), "%"),
-                  ],
+          child: IntrinsicHeight(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Expanded(
+                  flex: 1,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    mainAxisAlignment: MainAxisAlignment.start,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    spacing: 5,
+                    children: [
+                      _infoLine(Icons.location_on, "Position", telemetry?.position.toString(), "px"),
+                      _infoLine(Icons.double_arrow, "Velocity", telemetry?.velocity.toString(), "px/s"),
+                      _infoLine(Icons.battery_5_bar, "Battery", telemetry?.battery.toString(), "%"),
+                      _infoLine(Icons.local_gas_station, "Fuel", telemetry?.fuel.toString(), "%"),
+                    ],
+                  ),
                 ),
-              ),
-              VerticalDivider(),
-              Expanded(
-                flex: 1,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  mainAxisAlignment: MainAxisAlignment.start,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  spacing: 5,
-                  children: [
-                    _infoLine(Icons.wifi, "Data volume", telemetry?.dataVolume.toString(), "kb"),
-                    _infoLine(
-                      Icons.directions,
-                      "Distance covered",
-                      telemetry?.distanceCovered.toStringAsFixed(1),
-                      "px",
-                    ),
-                    _infoLine(Icons.check, "Objectives done", telemetry?.objectivesDone.toString(), null),
-                    _infoLine(Icons.leaderboard, "Objectives points", telemetry?.objectivesPoints.toString(), "points"),
-                  ],
+                VerticalDivider(width: 10),
+                Expanded(
+                  flex: 1,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    mainAxisAlignment: MainAxisAlignment.start,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    spacing: 5,
+                    children: [
+                      _infoLine(Icons.wifi, "Data volume", telemetry?.dataVolume.toString(), "kb"),
+                      _infoLine(
+                        Icons.directions,
+                        "Distance covered",
+                        telemetry?.distanceCovered.toStringAsFixed(1),
+                        "px",
+                      ),
+                      _infoLine(Icons.check, "Objectives done", telemetry?.objectivesDone.toString(), null),
+                      _infoLine(
+                        Icons.leaderboard,
+                        "Objectives points",
+                        telemetry?.objectivesPoints.toString(),
+                        "points",
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ],

@@ -20,8 +20,6 @@ class GetCurrentTelemetryMessage extends UpstreamMessage {
   Map serialize() => {"type": "GT"};
 }
 
-enum CameraAngle { narrow, normal, wide }
-
 class ControlMessage extends UpstreamMessage {
   final (double x, double y)? velocity;
   final State? state;

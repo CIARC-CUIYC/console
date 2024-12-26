@@ -1,4 +1,4 @@
-import 'package:ciarc_console/model/melvin_message.dart';
+import 'common.dart';
 
 abstract class Objective {
   final int? id;

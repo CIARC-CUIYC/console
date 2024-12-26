@@ -1,0 +1,17 @@
+syntax = "proto3";
+
+message Upstream {
+  optional Ping ping = 1;
+
+  message Ping {
+    optional string echo = 1;
+  }
+}
+
+message Downstream {
+  optional Pong pong = 1;
+
+  message Pong {
+    optional string echo = 1;
+  };
+}

@@ -1,6 +1,7 @@
 import 'package:ciarc_console/model/objective.dart';
 import 'package:ciarc_console/model/telemetry.dart';
 import 'package:ciarc_console/service/ground_station_client.dart';
+import 'package:ciarc_console/service/melvin_client.dart';
 import 'package:ciarc_console/ui/achievements_tab.dart';
 import 'package:ciarc_console/ui/announcements_tab.dart';
 import 'package:ciarc_console/ui/control_tab.dart';
@@ -11,8 +12,6 @@ import 'package:get_it/get_it.dart';
 import 'package:injectable/injectable.dart';
 import 'main.config.dart';
 import 'package:intl/date_symbol_data_local.dart';
-
-import 'ui/map_widget.dart';
 
 final getIt = GetIt.instance;
 
@@ -45,6 +44,8 @@ class _MyAppState extends State<MyApp> with SingleTickerProviderStateMixin {
         _telemetry = telemetry;
       }),
     );
+
+    getIt.get<MelvinClient>();
     super.initState();
   }
 
@@ -58,11 +59,11 @@ class _MyAppState extends State<MyApp> with SingleTickerProviderStateMixin {
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Expanded(
-            flex: 1,
+            flex: 3,
             child: Scaffold(body: StatusPanel(telemetry: _telemetry, highlightedArea: _highlightedArea)),
           ),
           Expanded(
-            flex: 1,
+            flex: 2,
             child: Scaffold(
               body: TabBarView(
                 controller: _tabController,

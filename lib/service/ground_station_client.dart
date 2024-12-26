@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:ciarc_console/model/common.dart';
-import 'package:ciarc_console/model/melvin_message.dart';
 import 'package:ciarc_console/model/objective.dart';
 import 'package:ciarc_console/model/telemetry.dart';
 import 'package:flutter/painting.dart';

@@ -34,7 +34,7 @@ class _AnnouncementsTabState extends State<AnnouncementsTab> {
 
     return ListView.separated(
       itemBuilder: (context, index) {
-        final announcement = announcements[index];
+        final announcement = announcements[announcements.length - index - 1];
         return ListTile(
           leading: announcement.severity == AnnouncementSeverity.error ? Icon(Icons.error_outline) : null,
           title: Text(announcement.message),
