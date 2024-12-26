@@ -1,18 +1,13 @@
-import 'package:ciarc_console/main.dart';
-import 'package:ciarc_console/service/ground_station_client.dart';
 import 'package:flutter/material.dart';
 
+import '../main.dart';
 import '../model/achievement.dart';
-import 'status_panel.dart';
+import '../service/ground_station_client.dart';
+import 'time_ago.dart';
 
-class AchievementsTab extends StatefulWidget {
-  const AchievementsTab({super.key});
+class AchievementsTab extends StatelessWidget {
+  AchievementsTab({super.key});
 
-  @override
-  State<StatefulWidget> createState() => _AchievementsTabState();
-}
-
-class _AchievementsTabState extends State<AchievementsTab> {
   final GroundStationClient _groundStationClient = getIt.get();
 
   @override
@@ -35,7 +30,9 @@ class _AchievementsTabState extends State<AchievementsTab> {
       return ListView.separated(
         itemBuilder: (context, index) {
           if (index == achievements.data.length) {
-            return Center(
+            return Container(
+              alignment: Alignment.center,
+              padding: EdgeInsets.symmetric(vertical: 10),
               child: TimeAgo(
                 timestamp: achievements.timestamp,
                 builder: (context, timeText) => Text("Last updated: $timeText"),
@@ -47,16 +44,16 @@ class _AchievementsTabState extends State<AchievementsTab> {
             trailing: achievement.done ? Icon(Icons.check) : null,
             title: Text(achievement.name),
             subtitle: Text("${achievement.points} Points"),
-            onTap: () => _showDetailsSheet(achievement),
+            onTap: () => _showDetailsSheet(context, achievement),
           );
         },
-        separatorBuilder: (context, index) => Divider(indent: 5),
+        separatorBuilder: (context, index) => Divider(indent: 5, height: 2, thickness: 1),
         itemCount: achievements.data.length + 1,
       );
     },
   );
 
-  void _showDetailsSheet(Achievement achievement) {
+  void _showDetailsSheet(BuildContext context, Achievement achievement) {
     showModalBottomSheet(
       context: context,
       builder:

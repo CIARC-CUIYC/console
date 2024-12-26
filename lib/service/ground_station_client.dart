@@ -10,6 +10,7 @@ import 'package:injectable/injectable.dart';
 
 import '../model/achievement.dart';
 import '../model/announcement.dart';
+import '../model/slot.dart';
 
 typedef AnnouncementListener = void Function(List<Announcement>);
 
@@ -66,11 +67,13 @@ class GroundStationClient {
   final ValueNotifier<List<Announcement>?> announcements = ValueNotifier(null);
   final ValueNotifier<RemoteData<List<Achievement>>?> achievements = ValueNotifier(null);
   final ValueNotifier<RemoteData<List<Objective>>?> objectives = ValueNotifier(null);
+  final ValueNotifier<RemoteData<List<Slot>>?> slots = ValueNotifier(null);
   final ValueNotifier<RemoteData<Telemetry>?> telemetry = ValueNotifier(null);
 
   late final AutoRefresher<RemoteData<List<Achievement>>?> _achievementsRefresher;
   late final AutoRefresher<RemoteData<List<Objective>>?> _objectivesRefresher;
   late final AutoRefresher<RemoteData<Telemetry>?> _telemetryRefresher;
+  late final AutoRefresher<RemoteData<List<Slot>>?> _slotsRefresher;
   StreamSubscription<SseEvent>? _announcementsSseSubscription;
 
   GroundStationClient() {
@@ -81,6 +84,11 @@ class GroundStationClient {
 
     _objectivesRefresher = AutoRefresher(objectives, () async {
       final data = await _getObjectives();
+      return RemoteData(timestamp: DateTime.timestamp(), data: data);
+    });
+
+    _slotsRefresher = AutoRefresher(slots, () async {
+      final data = await _getSlots();
       return RemoteData(timestamp: DateTime.timestamp(), data: data);
     });
 
@@ -96,6 +104,7 @@ class GroundStationClient {
   void refresh() {
     _achievementsRefresher.refresh();
     _objectivesRefresher.refresh();
+    _slotsRefresher.refresh();
     _telemetryRefresher.refresh();
   }
 
@@ -164,6 +173,32 @@ class GroundStationClient {
           ),
         )
         .toList(growable: false);
+  }
+
+  Future<List<Slot>> _getSlots() async {
+    final response = await http.get(Uri.parse(slotsUrl));
+    if (response.statusCode ~/ 100 != 2) throw Exception("could not get slots");
+    final Map jsonResponse = const JsonDecoder().convert(response.body);
+    final slotsJson = jsonResponse["slots"] as List;
+    return slotsJson
+        .map(
+          (achievementJson) => Slot(
+            id: achievementJson["name"],
+            start: DateTime.parse(achievementJson["start"]),
+            end: DateTime.parse(achievementJson["end"]),
+            booked: achievementJson["enabled"],
+          ),
+        )
+        .toList(growable: false);
+  }
+
+  Future<void> bookSlot(int id, {bool unBook = false}) async {
+    final response = await http.put(Uri.parse("$slotsUrl?slot_id=$id&enabled=${!unBook}"));
+    if (response.statusCode ~/ 100 != 2) throw Exception("could not book slot");
+    final slotsData = slots.value;
+    slotsData?.data.firstWhere((slot) => slot.id == id).booked = !unBook;
+    slots.value = slotsData;
+    _slotsRefresher.refresh();
   }
 
   Future<List<Objective>> _getObjectives() async {

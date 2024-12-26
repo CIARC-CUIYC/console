@@ -1,10 +1,10 @@
-import 'package:ciarc_console/main.dart';
-import 'package:ciarc_console/service/ground_station_client.dart';
-import 'package:ciarc_console/ui/status_panel.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
+import '../main.dart';
 import '../model/objective.dart';
+import '../service/ground_station_client.dart';
+import 'time_ago.dart';
 
 class ObjectivesTab extends StatefulWidget {
   final void Function(ZonedObjective? objective) onHover;
@@ -43,7 +43,9 @@ class _ObjectivesTabState extends State<ObjectivesTab> {
       return ListView.separated(
         itemBuilder: (context, index) {
           if (index == objectives.data.length) {
-            return Center(
+            return Container(
+              alignment: Alignment.center,
+              padding: EdgeInsets.symmetric(vertical: 10),
               child: TimeAgo(
                 timestamp: objectives.timestamp,
                 builder: (context, timeText) => Text("Last updated: $timeText"),
@@ -73,7 +75,7 @@ class _ObjectivesTabState extends State<ObjectivesTab> {
             },
           );
         },
-        separatorBuilder: (context, index) => Divider(indent: 5),
+        separatorBuilder: (context, index) => Divider(indent: 5, height: 2, thickness: 1,),
         itemCount: objectives.data.length + 1,
       );
     },

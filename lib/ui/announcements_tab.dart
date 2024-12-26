@@ -29,7 +29,7 @@ class AnnouncementsTab extends StatelessWidget {
             subtitle: Text(_dateFormat.format(announcement.timestamp)),
           );
         },
-        separatorBuilder: (context, index) => Divider(indent: 5),
+        separatorBuilder: (context, index) => Divider(indent: 5, height: 2, thickness: 1,),
         itemCount: announcements.length,
       );
     },

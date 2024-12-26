@@ -12,6 +12,8 @@ import 'package:injectable/injectable.dart';
 import 'main.config.dart';
 import 'package:intl/date_symbol_data_local.dart';
 
+import 'ui/slots_tab.dart';
+
 final getIt = GetIt.instance;
 
 @InjectableInit()
@@ -37,7 +39,7 @@ class _MyAppState extends State<MyApp> with SingleTickerProviderStateMixin {
 
   @override
   void initState() {
-    _tabController = TabController(length: 4, vsync: this);
+    _tabController = TabController(length: 5, vsync: this);
     _tabController.addListener(_onTabChange);
 
     getIt.get<MelvinClient>();
@@ -50,6 +52,7 @@ class _MyAppState extends State<MyApp> with SingleTickerProviderStateMixin {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'CIARC Console',
+      debugShowCheckedModeBanner: false,
       theme: ThemeData(colorScheme: ColorScheme.fromSeed(seedColor: Colors.lightGreen), useMaterial3: false),
       home: Row(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -63,6 +66,7 @@ class _MyAppState extends State<MyApp> with SingleTickerProviderStateMixin {
                 controller: _tabController,
                 children: [
                   ControlTab(),
+                  SlotsTab(),
                   ObjectivesTab(onHover: _onObjectiveHover),
                   AchievementsTab(),
                   AnnouncementsTab(),
@@ -71,15 +75,18 @@ class _MyAppState extends State<MyApp> with SingleTickerProviderStateMixin {
               bottomNavigationBar: TabBar(
                 controller: _tabController,
                 labelColor: Colors.black54,
+                labelStyle: TextStyle(fontSize: 13),
+                labelPadding: EdgeInsets.zero,
                 tabs: [
                   Tab(text: "Control", icon: Icon(Icons.control_camera)),
+                  Tab(text: "Com. Slots", icon: Icon(Icons.sync_alt)),
                   Tab(text: "Objectives", icon: Icon(Icons.radar)),
                   Tab(text: "Achievements", icon: Icon(Icons.leaderboard)),
                   Tab(text: "Announcements", icon: Icon(Icons.newspaper)),
                 ],
               ),
               floatingActionButton:
-                  _tabController.index == 1 || _tabController.index == 2
+                  _tabController.index == 1 || _tabController.index == 2 || _tabController.index == 3
                       ? FloatingActionButton.small(
                         onPressed: () {
                           _groundStationClient.refresh();
