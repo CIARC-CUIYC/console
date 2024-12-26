@@ -22,7 +22,7 @@ class GetCurrentTelemetryMessage extends UpstreamMessage {
 
 class ControlMessage extends UpstreamMessage {
   final (double x, double y)? velocity;
-  final State? state;
+  final SatelliteState? state;
   final CameraAngle? cameraAngle;
 
   ControlMessage({super.timestamp, super.ttl, required this.velocity, required this.state, required this.cameraAngle});

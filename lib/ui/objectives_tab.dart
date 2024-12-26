@@ -1,5 +1,6 @@
 import 'package:ciarc_console/main.dart';
 import 'package:ciarc_console/service/ground_station_client.dart';
+import 'package:ciarc_console/ui/status_panel.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
@@ -18,60 +19,65 @@ class _ObjectivesTabState extends State<ObjectivesTab> {
   final GroundStationClient _groundStationClient = getIt.get();
   static final DateFormat _dateFormat = DateFormat.MEd("de_DE").add_Hm();
 
-  List<Objective>? _objectives;
-
   Objective? _currentHover;
 
   @override
-  void initState() {
-    super.initState();
-    _groundStationClient.getObjectives().then(
-      (objectives) => setState(() {
-        _objectives = objectives;
-      }),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final objectives = _objectives;
-    if (objectives == null) {
-      return Center(child: CircularProgressIndicator());
-    } else if (objectives.isEmpty) {
-      return Center(child: Text("No objectives available yet."));
-    }
-
-    final now = DateTime.now();
-
-    return ListView.separated(
-      itemBuilder: (context, index) {
-        final objective = objectives[index];
-        return MouseRegion(
-          child: ListTile(
-            textColor: now.isAfter(objective.end) ? Colors.grey : null,
-            leading: Icon(objective is BeaconObjective ? Icons.my_location_outlined : Icons.crop),
-            title: Text(objective.name),
-            subtitle: Text("${_dateFormat.format(objective.start)} - ${_dateFormat.format(objective.end)}"),
-            onTap: () => _showDetailsSheet(objective),
-          ),
-          onEnter: (value) {
-            if (objective is ZonedObjective) {
-              _currentHover = objective;
-              widget.onHover(objective);
-            }
-          },
-          onExit: (value) {
-            if (_currentHover == objective) {
-              _currentHover = null;
-              widget.onHover(null);
-            }
-          },
+  Widget build(BuildContext context) => ValueListenableBuilder(
+    valueListenable: _groundStationClient.objectives,
+    builder: (context, objectives, widget_) {
+      if (objectives == null) {
+        return Center(child: CircularProgressIndicator());
+      } else if (objectives.data.isEmpty) {
+        return Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Text("No objectives available yet"),
+            TimeAgo(timestamp: objectives.timestamp, builder: (context, timeText) => Text("Last updated: $timeText")),
+          ],
         );
-      },
-      separatorBuilder: (context, index) => Divider(indent: 5),
-      itemCount: objectives.length,
-    );
-  }
+      }
+
+      final now = DateTime.now();
+
+      return ListView.separated(
+        itemBuilder: (context, index) {
+          if (index == objectives.data.length) {
+            return Center(
+              child: TimeAgo(
+                timestamp: objectives.timestamp,
+                builder: (context, timeText) => Text("Last updated: $timeText"),
+              ),
+            );
+          }
+          final objective = objectives.data[index];
+          return MouseRegion(
+            child: ListTile(
+              textColor: now.isAfter(objective.end) ? Colors.grey : null,
+              leading: Icon(objective is BeaconObjective ? Icons.my_location_outlined : Icons.crop),
+              title: Text(objective.name),
+              subtitle: Text("${_dateFormat.format(objective.start)} - ${_dateFormat.format(objective.end)}"),
+              onTap: () => _showDetailsSheet(objective),
+            ),
+            onEnter: (value) {
+              if (objective is ZonedObjective) {
+                _currentHover = objective;
+                widget.onHover(objective);
+              }
+            },
+            onExit: (value) {
+              if (_currentHover == objective) {
+                _currentHover = null;
+                widget.onHover(null);
+              }
+            },
+          );
+        },
+        separatorBuilder: (context, index) => Divider(indent: 5),
+        itemCount: objectives.data.length + 1,
+      );
+    },
+  );
 
   void _showDetailsSheet(Objective objective) {
     showModalBottomSheet(

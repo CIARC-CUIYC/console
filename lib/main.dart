@@ -1,5 +1,4 @@
 import 'package:ciarc_console/model/objective.dart';
-import 'package:ciarc_console/model/telemetry.dart';
 import 'package:ciarc_console/service/ground_station_client.dart';
 import 'package:ciarc_console/service/melvin_client.dart';
 import 'package:ciarc_console/ui/achievements_tab.dart';
@@ -34,34 +33,29 @@ class MyApp extends StatefulWidget {
 class _MyAppState extends State<MyApp> with SingleTickerProviderStateMixin {
   late final TabController _tabController;
   Rect? _highlightedArea;
-  Telemetry? _telemetry;
+  final GroundStationClient _groundStationClient = getIt.get();
 
   @override
   void initState() {
     _tabController = TabController(length: 4, vsync: this);
-    getIt.get<GroundStationClient>().getTelemetry().then(
-      (telemetry) => setState(() {
-        _telemetry = telemetry;
-      }),
-    );
+    _tabController.addListener(_onTabChange);
 
     getIt.get<MelvinClient>();
     super.initState();
   }
 
+  void _onTabChange() => setState(() {});
+
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'CIARC Console',
-      theme: ThemeData(colorScheme: ColorScheme.fromSeed(seedColor: Colors.lightGreen), useMaterial3: true),
+      theme: ThemeData(colorScheme: ColorScheme.fromSeed(seedColor: Colors.lightGreen), useMaterial3: false),
       home: Row(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Expanded(
-            flex: 3,
-            child: Scaffold(body: StatusPanel(telemetry: _telemetry, highlightedArea: _highlightedArea)),
-          ),
+          Expanded(flex: 3, child: Scaffold(body: StatusPanel(highlightedArea: _highlightedArea))),
           Expanded(
             flex: 2,
             child: Scaffold(
@@ -76,6 +70,7 @@ class _MyAppState extends State<MyApp> with SingleTickerProviderStateMixin {
               ),
               bottomNavigationBar: TabBar(
                 controller: _tabController,
+                labelColor: Colors.black54,
                 tabs: [
                   Tab(text: "Control", icon: Icon(Icons.control_camera)),
                   Tab(text: "Objectives", icon: Icon(Icons.radar)),
@@ -83,6 +78,15 @@ class _MyAppState extends State<MyApp> with SingleTickerProviderStateMixin {
                   Tab(text: "Announcements", icon: Icon(Icons.newspaper)),
                 ],
               ),
+              floatingActionButton:
+                  _tabController.index == 1 || _tabController.index == 2
+                      ? FloatingActionButton.small(
+                        onPressed: () {
+                          _groundStationClient.refresh();
+                        },
+                        child: Icon(Icons.refresh),
+                      )
+                      : null,
             ),
           ),
         ],
@@ -99,5 +103,11 @@ class _MyAppState extends State<MyApp> with SingleTickerProviderStateMixin {
         _highlightedArea = null;
       }
     });
+  }
+
+  @override
+  void dispose() {
+    _tabController.removeListener(_onTabChange);
+    super.dispose();
   }
 }

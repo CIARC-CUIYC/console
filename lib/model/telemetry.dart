@@ -3,7 +3,7 @@ import 'dart:ui';
 import 'common.dart';
 
 class Telemetry {
-  final State state;
+  final SatelliteState state;
   final Offset position;
   final Offset velocity;
   final double battery;

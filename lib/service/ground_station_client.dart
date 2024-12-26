@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:ciarc_console/model/common.dart';
 import 'package:ciarc_console/model/objective.dart';
 import 'package:ciarc_console/model/telemetry.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/painting.dart';
 import 'package:http/http.dart' as http;
 import 'package:injectable/injectable.dart';
@@ -11,6 +12,47 @@ import '../model/achievement.dart';
 import '../model/announcement.dart';
 
 typedef AnnouncementListener = void Function(List<Announcement>);
+
+class RemoteData<T> {
+  final DateTime timestamp;
+  final T data;
+
+  RemoteData({required this.timestamp, required this.data});
+}
+
+class AutoRefresher<T> {
+  Timer? _timer;
+  bool _currentlyRefreshing = false;
+
+  final Duration refreshPeriod;
+  final ValueNotifier<T> notifier;
+  final Future<T> Function() fetcher;
+
+  AutoRefresher(this.notifier, this.fetcher, {this.refreshPeriod = const Duration(minutes: 10)});
+
+  void _onTimerRefresh() {
+    _timer = null;
+    refresh();
+  }
+
+  Future<void> refresh() async {
+    if (_currentlyRefreshing) return;
+    _currentlyRefreshing = true;
+    try {
+      final result = await fetcher();
+      notifier.value = result;
+    } catch (e) {
+      // ignore
+    }
+    _currentlyRefreshing = false;
+    _timer ??= Timer(refreshPeriod, _onTimerRefresh);
+  }
+
+  void dispose() {
+    _timer?.cancel();
+    _timer = null;
+  }
+}
 
 @singleton
 class GroundStationClient {
@@ -21,21 +63,40 @@ class GroundStationClient {
   static const String announcementsUrl = "$baseUrl/announcements";
   static const String observationUrl = "$baseUrl/observation";
 
-  final List<AnnouncementListener> _announcementsListeners = [];
-  final List<Announcement> _currentAnnouncements = [];
+  final ValueNotifier<List<Announcement>?> announcements = ValueNotifier(null);
+  final ValueNotifier<RemoteData<List<Achievement>>?> achievements = ValueNotifier(null);
+  final ValueNotifier<RemoteData<List<Objective>>?> objectives = ValueNotifier(null);
+  final ValueNotifier<RemoteData<Telemetry>?> telemetry = ValueNotifier(null);
+
+  late final AutoRefresher<RemoteData<List<Achievement>>?> _achievementsRefresher;
+  late final AutoRefresher<RemoteData<List<Objective>>?> _objectivesRefresher;
+  late final AutoRefresher<RemoteData<Telemetry>?> _telemetryRefresher;
   StreamSubscription<SseEvent>? _announcementsSseSubscription;
 
-  Future<void> addAnnouncementsListener(AnnouncementListener listener) async {
-    await _startListeningForAnnouncements();
-    _announcementsListeners.add(listener);
-    listener(_currentAnnouncements);
+  GroundStationClient() {
+    _achievementsRefresher = AutoRefresher(achievements, () async {
+      final data = await _getAchievements();
+      return RemoteData(timestamp: DateTime.timestamp(), data: data);
+    });
+
+    _objectivesRefresher = AutoRefresher(objectives, () async {
+      final data = await _getObjectives();
+      return RemoteData(timestamp: DateTime.timestamp(), data: data);
+    });
+
+    _telemetryRefresher = AutoRefresher(telemetry, _getTelemetry, refreshPeriod: Duration(seconds: 30));
+    _start();
   }
 
-  void removeAnnouncementsListener(AnnouncementListener listener) {
-    _announcementsListeners.remove(listener);
-    if (_announcementsListeners.isEmpty) {
-      _stopListeningForAnnouncements();
-    }
+  Future<void> _start() async {
+    refresh();
+    await _startListeningForAnnouncements();
+  }
+
+  void refresh() {
+    _achievementsRefresher.refresh();
+    _objectivesRefresher.refresh();
+    _telemetryRefresher.refresh();
   }
 
   Future<void> _startListeningForAnnouncements() async {
@@ -43,22 +104,16 @@ class GroundStationClient {
     final client = http.Client();
     final response = await client.send(http.Request("GET", Uri.parse(announcementsUrl)));
     if (response.statusCode ~/ 100 != 2) throw Exception("could not subscribe");
+    announcements.value ??= [];
     _announcementsSseSubscription = response.stream
         .transform(Utf8Decoder())
         .transform(LineSplitter())
         .transform(SseStreamTransformer())
         .listen((event) {
-          _currentAnnouncements.add(_parseAnnouncement(event));
-          for (final listener in _announcementsListeners) {
-            try {
-              listener(_currentAnnouncements);
-            } catch (e, stack) {
-              Zone.current.handleUncaughtError(e, stack);
-            }
-          }
+          final currentAnnouncements = announcements.value ?? [];
+          currentAnnouncements.add(_parseAnnouncement(event));
+          announcements.value = currentAnnouncements;
         });
-
-    await Future.delayed(Duration(seconds: 1)); // XXX Wait until we received all initial announcements
   }
 
   void _stopListeningForAnnouncements() {
@@ -67,27 +122,33 @@ class GroundStationClient {
     announcementsSseSubscription.cancel();
   }
 
-  Future<Telemetry> getTelemetry() async {
+  Future<RemoteData<Telemetry>> _getTelemetry() async {
     final response = await http.get(Uri.parse(observationUrl));
     if (response.statusCode ~/ 100 != 2) throw Exception("could get telemetry");
     final Map jsonResponse = const JsonDecoder().convert(response.body);
-    return Telemetry(
-      state: State.values.firstWhere((value) => value == jsonResponse["state"], orElse: () => State.none),
-      position: Offset(jsonResponse["width_x"].toDouble(), jsonResponse["height_y"].toDouble()),
-      velocity: Offset(jsonResponse["vx"].toDouble(), jsonResponse["vy"].toDouble()),
-      battery: jsonResponse["battery"].toDouble(),
-      fuel: jsonResponse["fuel"].toDouble(),
-      dataVolume: (
-        jsonResponse["data_volume"]["data_volume_sent"],
-        jsonResponse["data_volume"]["data_volume_received"],
+    return RemoteData(
+      timestamp: DateTime.parse(jsonResponse["timestamp"]),
+      data: Telemetry(
+        state: SatelliteState.values.firstWhere(
+          (value) => value == jsonResponse["state"],
+          orElse: () => SatelliteState.none,
+        ),
+        position: Offset(jsonResponse["width_x"].toDouble(), jsonResponse["height_y"].toDouble()),
+        velocity: Offset(jsonResponse["vx"].toDouble(), jsonResponse["vy"].toDouble()),
+        battery: jsonResponse["battery"].toDouble(),
+        fuel: jsonResponse["fuel"].toDouble(),
+        dataVolume: (
+          jsonResponse["data_volume"]["data_volume_sent"],
+          jsonResponse["data_volume"]["data_volume_received"],
+        ),
+        distanceCovered: jsonResponse["distance_covered"].toDouble(),
+        objectivesDone: jsonResponse["objectives_done"],
+        objectivesPoints: jsonResponse["objectives_points"],
       ),
-      distanceCovered: jsonResponse["distance_covered"].toDouble(),
-      objectivesDone: jsonResponse["objectives_done"],
-      objectivesPoints: jsonResponse["objectives_points"],
     );
   }
 
-  Future<List<Achievement>> getAchievements() async {
+  Future<List<Achievement>> _getAchievements() async {
     final response = await http.get(Uri.parse(achievementsUrl));
     if (response.statusCode ~/ 100 != 2) throw Exception("could get achievements");
     final Map jsonResponse = const JsonDecoder().convert(response.body);
@@ -105,7 +166,7 @@ class GroundStationClient {
         .toList(growable: false);
   }
 
-  Future<List<Objective>> getObjectives() async {
+  Future<List<Objective>> _getObjectives() async {
     final response = await http.get(Uri.parse(objectivesUrl));
     if (response.statusCode ~/ 100 != 2) throw Exception("could get objectives");
     final Map jsonResponse = const JsonDecoder().convert(response.body);
@@ -155,8 +216,6 @@ class GroundStationClient {
 
   @disposeMethod
   void dispose() {
-    _announcementsListeners.clear();
-    _currentAnnouncements.clear();
     _stopListeningForAnnouncements();
   }
 
@@ -226,6 +285,7 @@ class SseStreamTransformerEventSink implements EventSink<String> {
     if (line.isEmpty) {
       if (_currentData.isEmpty) {
         _currentEventType = "";
+        return;
       } else if (_currentData.endsWith("\n")) {
         _currentData.substring(0, _currentData.length - 1);
       }
