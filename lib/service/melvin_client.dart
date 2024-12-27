@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 import 'package:ciarc_console/model/telemetry.dart';
+import 'package:dartssh2/dartssh2.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'package:injectable/injectable.dart';
@@ -19,6 +20,7 @@ class MelvinClient {
   ValueNotifier<ui.Image?> mapImage = ValueNotifier(null);
   ValueNotifier<RemoteData<Telemetry>?> telemetry = ValueNotifier(null);
   bool _closed = false;
+  int lastSnapshot = 0;
 
   MelvinClient() {
     _tryConnect();
@@ -26,7 +28,7 @@ class MelvinClient {
 
   Future<void> _tryConnect() async {
     try {
-      _protocolClient = await MelvinProtocolClient.connect();
+      _protocolClient = await LocalMelvinProtocolClient.connect();
     } catch (e) {
       // ignore
       _retryTimer = Timer(Duration(seconds: 5), _tryConnect);
@@ -35,7 +37,11 @@ class MelvinClient {
     _retryTimer = null;
     _downstreamSubscription = _protocolClient!.downstream.listen(_onDownstreamMessage, onDone: _restart);
 
-    _protocolClient!.send(proto.Upstream(ping: proto.Upstream_Ping(echo: "Hello Melvin")));
+    if (mapImage.value == null) {
+      _protocolClient!.send(proto.Upstream(getFullImage: proto.Upstream_GetFullImage()));
+    } else {
+      _protocolClient!.send(proto.Upstream(getSnapshotImage: proto.Upstream_GetSnapshotDiffImage()));
+    }
   }
 
   void _restart() {
@@ -58,6 +64,11 @@ class MelvinClient {
         Uint8List.fromList(imageMessage.data),
         oldImage,
       ).then((newImage) => mapImage.value = newImage);
+      lastSnapshot++;
+      if (lastSnapshot >= 2) {
+        _protocolClient?.send(proto.Upstream(createSnapshotImage: proto.Upstream_CreateSnapshotImage()));
+        lastSnapshot = 0;
+      }
     } else if (downstreamMessage.hasTelemetry()) {
       final telemetryMessage = downstreamMessage.telemetry;
       SatelliteState mapState(proto.SatelliteState state) {
@@ -109,28 +120,81 @@ class MelvinClient {
   }
 }
 
-class MelvinProtocolClient {
-  final Socket _socket;
+abstract class MelvinProtocolClient {
   final Stream<proto.Downstream> downstream;
 
-  MelvinProtocolClient._internal(this._socket) : downstream = _socket.transform(MessageParserStreamTransformer());
-
-  static Future<MelvinProtocolClient> connect() async {
-    final socket = await Socket.connect("localhost", 1337);
-    return MelvinProtocolClient._internal(socket);
-  }
+  MelvinProtocolClient._internal(Stream<Uint8List> stream)
+    : downstream = stream.transform(MessageParserStreamTransformer());
 
   Future<void> send(proto.Upstream upstreamProto) async {
     final payload = upstreamProto.writeToBuffer();
     final lengthField = Uint8List(4);
     lengthField.buffer.asByteData().setInt32(0, payload.length);
-    _socket.add(lengthField);
-    _socket.add(payload);
-    await _socket.flush();
+    _write(lengthField);
+    _write(payload);
+    await _flush();
   }
 
+  void _write(Uint8List data);
+
+  Future<void> _flush() => Future.value();
+
+  Future close();
+}
+
+class LocalMelvinProtocolClient extends MelvinProtocolClient {
+  final Socket _socket;
+
+  LocalMelvinProtocolClient._internal(this._socket) : super._internal(_socket);
+
+  static Future<LocalMelvinProtocolClient> connect() async {
+    final socket = await Socket.connect("localhost", 1337);
+    return LocalMelvinProtocolClient._internal(socket);
+  }
+
+  @override
+  void _write(Uint8List data) => _socket.add(data);
+
+  @override
+  Future<void> _flush() => _socket.flush();
+
+  @override
   Future close() {
     return _socket.close();
+  }
+}
+
+class SSHMelvinProtocolClient extends MelvinProtocolClient {
+  final SSHClient _sshClient;
+  final SSHForwardChannel _channel;
+
+  SSHMelvinProtocolClient._internal(this._sshClient, this._channel) : super._internal(_channel.stream);
+
+  static Future<MelvinProtocolClient> connectSSH() async {
+    final client = SSHClient(
+      await SSHSocket.connect('10.100.50.1', 22),
+      username: 'root',
+      onPasswordRequest: () => 'password',
+    );
+
+    try {
+      final channel = await client.forwardLocal("localhost", 1337);
+      return SSHMelvinProtocolClient._internal(client, channel);
+    } catch (e) {
+      client.close();
+      rethrow;
+    }
+  }
+
+  @override
+  void _write(Uint8List data) async {
+    _channel.sink.add(data);
+  }
+
+  @override
+  Future close() async {
+    await _channel.close();
+    _sshClient.close();
   }
 }
 
@@ -206,15 +270,18 @@ Future<ui.Image> _composeImage(int positionX, int positionY, Uint8List bytes, ui
       oldImageBytes = Uint32List(height * width);
     }
 
-    final oldImagePosStart = positionY * width + positionX;
-    int oldImageCurrentOffset = oldImagePosStart;
+    int oldImageCurrentOffset = positionY * width;
     int newImageCurrentOffset = 0;
 
-    for (int y = 0; y < newImage.height; y++) {
-      for (int x = 0; x < newImage.width; x++) {
-        oldImageBytes[oldImageCurrentOffset + x] = newImageBytes[newImageCurrentOffset + x];
+    for (int newImageY = 0; newImageY < newImage.height; newImageY++) {
+      for (int newImageX = 0; newImageX < newImage.width; newImageX++) {
+        final x = (newImageX + positionX) >= width ? newImageX - width : newImageX + positionX;
+        oldImageBytes[oldImageCurrentOffset + x] = newImageBytes[newImageCurrentOffset + newImageX];
       }
       oldImageCurrentOffset += width;
+      if (oldImageCurrentOffset >= oldImageBytes.length) {
+        oldImageCurrentOffset = 0;
+      }
       newImageCurrentOffset += newImage.width;
     }
 

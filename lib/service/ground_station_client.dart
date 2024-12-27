@@ -85,7 +85,7 @@ class GroundStationClient {
       return RemoteData(timestamp: DateTime.timestamp(), data: data);
     });
 
-    _telemetryRefresher = AutoRefresher(telemetry, _getTelemetry, refreshPeriod: Duration(seconds: 30));
+    _telemetryRefresher = AutoRefresher(telemetry, _getTelemetry, refreshPeriod: Duration(seconds: 2));
     _start();
   }
 
@@ -176,7 +176,7 @@ class GroundStationClient {
     return slotsJson
         .map(
           (achievementJson) => Slot(
-            id: achievementJson["name"],
+            id: achievementJson["id"],
             start: DateTime.parse(achievementJson["start"]),
             end: DateTime.parse(achievementJson["end"]),
             booked: achievementJson["enabled"],

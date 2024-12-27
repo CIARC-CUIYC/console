@@ -1,11 +1,28 @@
 syntax = "proto3";
 
 message Upstream {
-  optional Ping ping = 1;
+
+  oneof content {
+    Ping ping = 1;
+    GetFullImage get_full_image = 2;
+    GetSnapshotDiffImage get_snapshot_image = 3;
+    CreateSnapshotImage create_snapshot_image = 4;
+  }
 
   message Ping {
     optional string echo = 1;
   }
+
+  message GetFullImage {
+
+  }
+
+  message GetSnapshotDiffImage {
+  }
+
+  message CreateSnapshotImage {
+  }
+
 }
 
 message Downstream {
