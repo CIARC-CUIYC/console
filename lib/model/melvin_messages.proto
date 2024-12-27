@@ -9,9 +9,45 @@ message Upstream {
 }
 
 message Downstream {
-  optional Pong pong = 1;
+  oneof content {
+    Pong pong = 1;
+    Image image = 2;
+    Telemetry telemetry = 3;
+  }
 
   message Pong {
     optional string echo = 1;
-  };
+  }
+
+  message Image {
+    int32 width = 1;
+    int32 height = 2;
+    int32 offset_x = 3;
+    int32 offset_y = 4;
+    bytes data = 5;
+  }
+
+  message Telemetry {
+    int64 timestamp = 1;
+    SatelliteState state = 2;
+    int32 position_x = 3;
+    int32 position_y = 4;
+    float velocity_x = 5;
+    float velocity_y = 6;
+    float battery = 7;
+    float fuel = 8;
+    int32 data_sent = 9;
+    int32 data_received = 10;
+    float distance_covered = 11;
+  }
+}
+
+enum SatelliteState {
+  none = 0;
+  deployment = 1;
+  safe = 2;
+  communication = 3;
+  charge = 4;
+  acquisition = 5;
+  transition = 6;
 }

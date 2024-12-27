@@ -1,14 +1,24 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:typed_data';
+import 'dart:ui' as ui;
+import 'package:ciarc_console/model/telemetry.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
 import 'package:injectable/injectable.dart';
 
+import '../model/common.dart';
 import '../model/melvin_messages.pb.dart' as proto;
+import '../ui/map_widget.dart';
 
 @singleton
 class MelvinClient {
   MelvinProtocolClient? _protocolClient;
   Timer? _retryTimer;
+  StreamSubscription<proto.Downstream>? _downstreamSubscription;
+  ValueNotifier<ui.Image?> mapImage = ValueNotifier(null);
+  ValueNotifier<RemoteData<Telemetry>?> telemetry = ValueNotifier(null);
+  bool _closed = false;
 
   MelvinClient() {
     _tryConnect();
@@ -23,15 +33,76 @@ class MelvinClient {
       return;
     }
     _retryTimer = null;
-    _protocolClient!.downstream.listen((m) {
-      debugPrint("Incoming downstream:\n${m.toDebugString()}");
-    });
+    _downstreamSubscription = _protocolClient!.downstream.listen(_onDownstreamMessage, onDone: _restart);
 
     _protocolClient!.send(proto.Upstream(ping: proto.Upstream_Ping(echo: "Hello Melvin")));
   }
 
+  void _restart() {
+    if (!_closed) {
+      _downstreamSubscription?.cancel();
+      _downstreamSubscription = null;
+      _protocolClient?.close();
+      _protocolClient = null;
+      _tryConnect();
+    }
+  }
+
+  void _onDownstreamMessage(proto.Downstream downstreamMessage) {
+    if (downstreamMessage.hasImage()) {
+      final imageMessage = downstreamMessage.image;
+      final oldImage = mapImage.value;
+      _composeImage(
+        imageMessage.offsetX,
+        imageMessage.offsetY,
+        Uint8List.fromList(imageMessage.data),
+        oldImage,
+      ).then((newImage) => mapImage.value = newImage);
+    } else if (downstreamMessage.hasTelemetry()) {
+      final telemetryMessage = downstreamMessage.telemetry;
+      SatelliteState mapState(proto.SatelliteState state) {
+        switch (state) {
+          case proto.SatelliteState.acquisition:
+            return SatelliteState.acquisition;
+          case proto.SatelliteState.charge:
+            return SatelliteState.charge;
+          case proto.SatelliteState.communication:
+            return SatelliteState.communication;
+          case proto.SatelliteState.deployment:
+            return SatelliteState.deployment;
+
+          case proto.SatelliteState.safe:
+            return SatelliteState.safe;
+          case proto.SatelliteState.transition:
+            return SatelliteState.transition;
+          case proto.SatelliteState.none:
+          default:
+            return SatelliteState.none;
+        }
+      }
+
+      telemetry.value = RemoteData(
+        timestamp: DateTime.fromMillisecondsSinceEpoch(telemetryMessage.timestamp.toInt()),
+        data: Telemetry(
+          state: mapState(telemetryMessage.state),
+          position: Offset(telemetryMessage.positionX.toDouble(), telemetryMessage.positionY.toDouble()),
+          velocity: Offset(telemetryMessage.velocityX.toDouble(), telemetryMessage.velocityY.toDouble()),
+          battery: telemetryMessage.battery,
+          fuel: telemetryMessage.fuel,
+          dataVolume: (telemetryMessage.dataSent, telemetryMessage.dataReceived),
+          distanceCovered: telemetryMessage.distanceCovered,
+          objectivesDone: 0,
+          objectivesPoints: 0,
+        ),
+      );
+    }
+  }
+
   @disposeMethod
   void dispose() {
+    _closed = true;
+    _downstreamSubscription?.cancel();
+    _downstreamSubscription = null;
     _retryTimer?.cancel();
     _retryTimer = null;
     _protocolClient?.close();
@@ -114,5 +185,47 @@ class MessageParserStreamTransformerEventSink implements EventSink<Uint8List> {
   @override
   void close() {
     _sink.close();
+  }
+}
+
+Future<ui.Image> _composeImage(int positionX, int positionY, Uint8List bytes, ui.Image? oldImage) async {
+  final height = MapWidget.mapHeightDisplaySpace.toInt();
+  final width = MapWidget.mapWidthDisplaySpace.toInt();
+  final buffer = await ui.ImmutableBuffer.fromUint8List(bytes);
+  final codec = await PaintingBinding.instance.instantiateImageCodecWithSize(buffer);
+  final frameInfo = await codec.getNextFrame();
+  final newImage = frameInfo.image;
+  if (newImage.height == height && newImage.width == width) {
+    return newImage;
+  } else {
+    final newImageBytes = (await newImage.toByteData(format: ui.ImageByteFormat.rawRgba))!.buffer.asUint32List();
+    final Uint32List oldImageBytes;
+    if (oldImage != null) {
+      oldImageBytes = (await oldImage.toByteData(format: ui.ImageByteFormat.rawRgba))!.buffer.asUint32List();
+    } else {
+      oldImageBytes = Uint32List(height * width);
+    }
+
+    final oldImagePosStart = positionY * width + positionX;
+    int oldImageCurrentOffset = oldImagePosStart;
+    int newImageCurrentOffset = 0;
+
+    for (int y = 0; y < newImage.height; y++) {
+      for (int x = 0; x < newImage.width; x++) {
+        oldImageBytes[oldImageCurrentOffset + x] = newImageBytes[newImageCurrentOffset + x];
+      }
+      oldImageCurrentOffset += width;
+      newImageCurrentOffset += newImage.width;
+    }
+
+    final codec =
+        await ui.ImageDescriptor.raw(
+          await ui.ImmutableBuffer.fromUint8List(oldImageBytes.buffer.asUint8List()),
+          width: width,
+          height: height,
+          pixelFormat: ui.PixelFormat.rgba8888,
+        ).instantiateCodec();
+    final frameInfo = await codec.getNextFrame();
+    return frameInfo.image;
   }
 }

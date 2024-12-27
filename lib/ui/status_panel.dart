@@ -1,3 +1,6 @@
+import 'package:ciarc_console/model/common.dart';
+import 'package:ciarc_console/model/telemetry.dart';
+import 'package:ciarc_console/service/melvin_client.dart';
 import 'package:flutter/material.dart';
 
 import '../main.dart';
@@ -8,14 +11,21 @@ import 'time_ago.dart';
 class StatusPanel extends StatelessWidget {
   final Rect? highlightedArea;
   final GroundStationClient _groundStationClient = getIt.get();
+  final MelvinClient _melvinClient = getIt.get();
 
   StatusPanel({super.key, this.highlightedArea});
 
   @override
-  Widget build(BuildContext context) => ValueListenableBuilder(
-    valueListenable: _groundStationClient.telemetry,
-    builder: (context, telemetryRemoteData, widget_) {
-      final telemetry = telemetryRemoteData?.data;
+  Widget build(BuildContext context) => ListenableBuilder(
+    listenable: Listenable.merge([_groundStationClient.telemetry, _melvinClient.mapImage, _melvinClient.telemetry]),
+    builder: (context, widget_) {
+      RemoteData<Telemetry>? telemetry;
+      if (_melvinClient.telemetry.value != null &&
+          _groundStationClient.telemetry.value?.timestamp.isAfter(_melvinClient.telemetry.value!.timestamp) != true) {
+        telemetry = _melvinClient.telemetry.value;
+      } else {
+        telemetry = _groundStationClient.telemetry.value;
+      }
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         mainAxisAlignment: MainAxisAlignment.start,
@@ -23,9 +33,10 @@ class StatusPanel extends StatelessWidget {
           Expanded(
             flex: 3,
             child: MapWidget(
+              mapImage: _melvinClient.mapImage.value,
               highlightArea: highlightedArea,
-              satellite: telemetry?.position,
-              satelliteVelocity: telemetry?.velocity,
+              satellite: telemetry?.data.position,
+              satelliteVelocity: telemetry?.data.velocity,
             ),
           ),
           Container(
@@ -44,15 +55,11 @@ class StatusPanel extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       spacing: 5,
                       children: [
-                        _infoLine(Icons.location_on, "Position", _formatOffset(telemetry?.position), "px"),
-                        _infoLine(Icons.double_arrow, "Velocity", _formatOffset(telemetry?.velocity), "px/s"),
-                        _infoLine(Icons.battery_5_bar, "Battery", telemetry?.battery.toString(), "%"),
-                        _infoLine(Icons.local_gas_station, "Fuel", telemetry?.fuel.toString(), "%"),
-                        if (telemetryRemoteData != null)
-                          TimeAgo(
-                            timestamp: telemetryRemoteData.timestamp,
-                            builder: (context, timeString) => _infoLine(Icons.update, "Last Update", timeString, null),
-                          ),
+                        _infoLine(Icons.location_on, "Position", _formatOffset(telemetry?.data.position), "px"),
+                        _infoLine(Icons.double_arrow, "Velocity", _formatOffset(telemetry?.data.velocity), "px/s"),
+                        _infoLine(Icons.battery_5_bar, "Battery", telemetry?.data.battery.toString(), "%"),
+                        _infoLine(Icons.local_gas_station, "Fuel", telemetry?.data.fuel.toString(), "%"),
+                        _infoLine(Icons.commit, "State", telemetry?.data.state.name, null),
                       ],
                     ),
                   ),
@@ -65,18 +72,28 @@ class StatusPanel extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       spacing: 5,
                       children: [
-                        _infoLine(Icons.wifi, "Data volume", _formatDataVolume(telemetry?.dataVolume), null),
+                        _infoLine(Icons.wifi, "Data volume", _formatDataVolume(telemetry?.data.dataVolume), null),
                         _infoLine(
                           Icons.directions,
                           "Distance covered",
-                          telemetry?.distanceCovered.toStringAsFixed(1),
+                          telemetry?.data.distanceCovered.toStringAsFixed(1),
                           "px",
                         ),
-                        _infoLine(Icons.check, "Objectives done", telemetry?.objectivesDone.toString(), null),
+                        if (telemetry != null)
+                          TimeAgo(
+                            timestamp: telemetry.timestamp,
+                            builder: (context, timeString) => _infoLine(Icons.update, "Last Update", timeString, null),
+                          ),
+                        _infoLine(
+                          Icons.check,
+                          "Objectives done",
+                          _groundStationClient.telemetry.value?.data.objectivesDone.toString(),
+                          null,
+                        ),
                         _infoLine(
                           Icons.leaderboard,
                           "Objectives points",
-                          telemetry?.objectivesPoints.toString(),
+                          _groundStationClient.telemetry.value?.data.objectivesPoints.toString(),
                           "points",
                         ),
                       ],

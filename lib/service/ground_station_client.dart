@@ -14,13 +14,6 @@ import '../model/slot.dart';
 
 typedef AnnouncementListener = void Function(List<Announcement>);
 
-class RemoteData<T> {
-  final DateTime timestamp;
-  final T data;
-
-  RemoteData({required this.timestamp, required this.data});
-}
-
 class AutoRefresher<T> {
   Timer? _timer;
   bool _currentlyRefreshing = false;
@@ -139,7 +132,7 @@ class GroundStationClient {
       timestamp: DateTime.parse(jsonResponse["timestamp"]),
       data: Telemetry(
         state: SatelliteState.values.firstWhere(
-          (value) => value == jsonResponse["state"],
+          (value) => value.name == jsonResponse["state"],
           orElse: () => SatelliteState.none,
         ),
         position: Offset(jsonResponse["width_x"].toDouble(), jsonResponse["height_y"].toDouble()),

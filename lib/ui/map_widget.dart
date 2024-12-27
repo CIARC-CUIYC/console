@@ -1,3 +1,5 @@
+import 'dart:ui' as ui;
+
 import 'package:flutter/material.dart';
 import 'package:zoom_widget/zoom_widget.dart';
 
@@ -12,8 +14,9 @@ class MapWidget extends StatelessWidget {
   final Rect? highlightArea;
   final Offset? satellite;
   final Offset? satelliteVelocity;
+  final ui.Image? mapImage;
 
-  const MapWidget({super.key, this.highlightArea, this.satellite, this.satelliteVelocity});
+  const MapWidget({super.key, this.mapImage, this.highlightArea, this.satellite, this.satelliteVelocity});
 
   @override
   Widget build(BuildContext context) {
@@ -27,7 +30,7 @@ class MapWidget extends StatelessWidget {
           child: Stack(
             fit: StackFit.expand,
             children: [
-              Image.asset("assets/map.jpg", fit: BoxFit.fill),
+              if (mapImage != null) RawImage(image: mapImage!, fit: BoxFit.fill),
               if (satellite != null && satelliteVelocity != null)
                 CustomPaint(
                   painter: SatelliteTrajectoryPainter(satellite: satellite!, satelliteVelocity: satelliteVelocity!),
