@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
@@ -28,7 +29,7 @@ class MelvinClient {
 
   Future<void> _tryConnect() async {
     try {
-      _protocolClient = await LocalMelvinProtocolClient.connect();
+      _protocolClient = await SSHMelvinProtocolClient.connectSSH();
     } catch (e) {
       // ignore
       _retryTimer = Timer(Duration(seconds: 5), _tryConnect);
@@ -109,6 +110,13 @@ class MelvinClient {
     }
   }
 
+  Future<void> restartMelvinOb() async {
+    final protocolClient = _protocolClient;
+    if (protocolClient is SSHMelvinProtocolClient) {
+      await protocolClient.restartMelvinOb();
+    }
+  }
+
   @disposeMethod
   void dispose() {
     _closed = true;
@@ -172,7 +180,7 @@ class SSHMelvinProtocolClient extends MelvinProtocolClient {
 
   static Future<MelvinProtocolClient> connectSSH() async {
     final client = SSHClient(
-      await SSHSocket.connect('10.100.50.1', 22),
+      await SSHSocket.connect('10.100.10.3', 22),
       username: 'root',
       onPasswordRequest: () => 'password',
     );
@@ -184,6 +192,12 @@ class SSHMelvinProtocolClient extends MelvinProtocolClient {
       client.close();
       rethrow;
     }
+  }
+
+  Future<void> restartMelvinOb() async {
+    final session = await _sshClient.execute("tmux kill-session -t melvin-runner; tmux new-session -d -s melvin-runner 'DRS_BASE_URL=http://10.100.10.3:33000 ./melvin-ob'");
+    session.close();
+    await session.done;
   }
 
   @override
@@ -262,12 +276,12 @@ Future<ui.Image> _composeImage(int positionX, int positionY, Uint8List bytes, ui
   if (newImage.height == height && newImage.width == width) {
     return newImage;
   } else {
-    final newImageBytes = (await newImage.toByteData(format: ui.ImageByteFormat.rawRgba))!.buffer.asUint32List();
-    final Uint32List oldImageBytes;
+    final newImagePixels = (await newImage.toByteData(format: ui.ImageByteFormat.rawRgba))!.buffer.asUint32List();
+    final Uint32List oldImagePixels;
     if (oldImage != null) {
-      oldImageBytes = (await oldImage.toByteData(format: ui.ImageByteFormat.rawRgba))!.buffer.asUint32List();
+      oldImagePixels = (await oldImage.toByteData(format: ui.ImageByteFormat.rawRgba))!.buffer.asUint32List();
     } else {
-      oldImageBytes = Uint32List(height * width);
+      oldImagePixels = Uint32List(height * width);
     }
 
     int oldImageCurrentOffset = positionY * width;
@@ -276,10 +290,12 @@ Future<ui.Image> _composeImage(int positionX, int positionY, Uint8List bytes, ui
     for (int newImageY = 0; newImageY < newImage.height; newImageY++) {
       for (int newImageX = 0; newImageX < newImage.width; newImageX++) {
         final x = (newImageX + positionX) >= width ? newImageX - width : newImageX + positionX;
-        oldImageBytes[oldImageCurrentOffset + x] = newImageBytes[newImageCurrentOffset + newImageX];
+        final newPixel = newImagePixels[newImageCurrentOffset + newImageX];
+        if (newPixel == 0) continue;
+        oldImagePixels[oldImageCurrentOffset + x] = newPixel;
       }
       oldImageCurrentOffset += width;
-      if (oldImageCurrentOffset >= oldImageBytes.length) {
+      if (oldImageCurrentOffset >= oldImagePixels.length) {
         oldImageCurrentOffset = 0;
       }
       newImageCurrentOffset += newImage.width;
@@ -287,7 +303,7 @@ Future<ui.Image> _composeImage(int positionX, int positionY, Uint8List bytes, ui
 
     final codec =
         await ui.ImageDescriptor.raw(
-          await ui.ImmutableBuffer.fromUint8List(oldImageBytes.buffer.asUint8List()),
+          await ui.ImmutableBuffer.fromUint8List(oldImagePixels.buffer.asUint8List()),
           width: width,
           height: height,
           pixelFormat: ui.PixelFormat.rgba8888,

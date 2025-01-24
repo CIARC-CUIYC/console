@@ -1,5 +1,7 @@
-import 'package:ciarc_console/ui/map_widget.dart';
+import 'package:ciarc_console/service/melvin_client.dart';
 import 'package:flutter/material.dart';
+
+import '../main.dart';
 
 class ControlTab extends StatefulWidget {
   const ControlTab({super.key});
@@ -9,6 +11,8 @@ class ControlTab extends StatefulWidget {
 }
 
 class _ControlTabState extends State<ControlTab> {
+  final MelvinClient _melvinClient = getIt();
+
   @override
   void initState() {
     super.initState();
@@ -17,6 +21,22 @@ class _ControlTabState extends State<ControlTab> {
   @override
   Widget build(BuildContext context) {
     //return MapWidget(hightlightArea: Rect.fromLTRB(2087, 600, 2687, 1200));
-    return MapWidget(highlightArea: Rect.fromLTRB(13831, 6248, 16749, 7258));
+    return Column(
+      children: [
+        OutlinedButton.icon(
+          onPressed: () async {
+            try {
+              await _melvinClient.restartMelvinOb();
+            } on Exception {
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Restart failed")));
+              }
+            }
+          },
+          label: Text("Restart Melvin OB"),
+          icon: Icon(Icons.restart_alt),
+        ),
+      ],
+    );
   }
 }
