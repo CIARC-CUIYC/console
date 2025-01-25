@@ -19,7 +19,7 @@ class StatusPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => ListenableBuilder(
-    listenable: Listenable.merge([_groundStationClient.telemetry, _melvinClient.mapImage, _melvinClient.telemetry]),
+    listenable: Listenable.merge([_groundStationClient.telemetry, _melvinClient.mapImage, _melvinClient.telemetry, _melvinClient.connectionState]),
     builder: (context, widget_) {
       RemoteData<Telemetry>? telemetry;
       if (_melvinClient.telemetry.value != null &&
@@ -28,19 +28,20 @@ class StatusPanel extends StatelessWidget {
       } else {
         telemetry = _groundStationClient.telemetry.value;
       }
+      final connectionState = _melvinClient.connectionState.value;
       if (compact) {
         return SlidingUpPanel(
           body: _buildMap(telemetry),
           isDraggable: true,
           padding: EdgeInsets.zero,
           maxHeight: 300,
-          panel: _buildInfoPanel(context, telemetry),
+          panel: _buildInfoPanel(context, telemetry, connectionState),
         );
       } else {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           mainAxisAlignment: MainAxisAlignment.start,
-          children: [Expanded(flex: 3, child: _buildMap(telemetry)), _buildInfoPanel(context, telemetry)],
+          children: [Expanded(flex: 3, child: _buildMap(telemetry)), _buildInfoPanel(context, telemetry, connectionState)],
         );
       }
     },
@@ -53,7 +54,7 @@ class StatusPanel extends StatelessWidget {
     satelliteVelocity: telemetry?.data.velocity,
   );
 
-  Widget _buildInfoPanel(BuildContext context, RemoteData<Telemetry>? telemetry) {
+  Widget _buildInfoPanel(BuildContext context, RemoteData<Telemetry>? telemetry, MelvinConnectionState connectionState) {
     final leftInfos = [
       _infoLine(Icons.location_on, "Position", _formatOffset(telemetry?.data.position), "px"),
       _infoLine(Icons.double_arrow, "Velocity", _formatOffset(telemetry?.data.velocity), "px/s"),
@@ -70,7 +71,8 @@ class StatusPanel extends StatelessWidget {
           timestamp: telemetry.timestamp,
           builder: (context, timeString) => _infoLine(Icons.update, "Last Update", timeString, null),
         ),
-      _infoLine(
+      _infoLine(Icons.signal_cellular_alt, "Connection", _formatConnectionState(connectionState), null)
+      /*_infoLine(
         Icons.check,
         "Objectives done",
         _groundStationClient.telemetry.value?.data.objectivesDone.toString(),
@@ -81,7 +83,7 @@ class StatusPanel extends StatelessWidget {
         "Objectives points",
         _groundStationClient.telemetry.value?.data.objectivesPoints.toString(),
         "points",
-      ),
+      ),*/
     ];
 
     final Widget panel;
@@ -162,5 +164,16 @@ class StatusPanel extends StatelessWidget {
       spacing: 5,
       children: [Icon(icon), Expanded(child: Text(label)), Text(valueText)],
     );
+  }
+
+  String _formatConnectionState(MelvinConnectionState connectionState) {
+    switch(connectionState) {
+      case MelvinConnectionState.notConnected:
+        return "Not connected";
+      case MelvinConnectionState.connectedToMachine:
+        return "Melvin not running";
+      case MelvinConnectionState.connectedToMachineAndMelvin:
+        return "Connected";
+    }
   }
 }

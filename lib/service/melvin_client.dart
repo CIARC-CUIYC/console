@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
@@ -13,45 +12,108 @@ import '../model/common.dart';
 import '../model/melvin_messages.pb.dart' as proto;
 import '../ui/map_widget.dart';
 
+enum MelvinConnectionState { notConnected, connectedToMachine, connectedToMachineAndMelvin }
+
 @singleton
 class MelvinClient {
-  MelvinProtocolClient? _protocolClient;
+  final MelvinProtocolClient _protocolClient = SSHMelvinProtocolClient();
   Timer? _retryTimer;
   StreamSubscription<proto.Downstream>? _downstreamSubscription;
   ValueNotifier<ui.Image?> mapImage = ValueNotifier(null);
   ValueNotifier<RemoteData<Telemetry>?> telemetry = ValueNotifier(null);
+  ValueNotifier<MelvinConnectionState> connectionState = ValueNotifier(MelvinConnectionState.notConnected);
   bool _closed = false;
   int lastSnapshot = 0;
+  bool _paused = false;
+  bool _tryingConnect = false;
+  Completer<int?>? _pendingSubmit;
+  Timer? _pendingSubmitTimeout;
 
   MelvinClient() {
     _tryConnect();
   }
 
   Future<void> _tryConnect() async {
-    try {
-      _protocolClient = await SSHMelvinProtocolClient.connectSSH();
-    } catch (e) {
-      // ignore
-      _retryTimer = Timer(Duration(seconds: 5), _tryConnect);
-      return;
-    }
-    _retryTimer = null;
-    _downstreamSubscription = _protocolClient!.downstream.listen(_onDownstreamMessage, onDone: _restart);
-
-    if (mapImage.value == null) {
-      _protocolClient!.send(proto.Upstream(getFullImage: proto.Upstream_GetFullImage()));
+    final newConnectionState = await _protocolClient.tryConnect();
+    if (newConnectionState == MelvinConnectionState.connectedToMachineAndMelvin) {
+      _tryingConnect = false;
+      connectionState.value = newConnectionState;
+      _retryTimer = null;
+      _downstreamSubscription = _protocolClient.downstream.listen(_onDownstreamMessage, onDone: _restart);
+      await _fetchMapImage();
     } else {
-      _protocolClient!.send(proto.Upstream(getSnapshotImage: proto.Upstream_GetSnapshotDiffImage()));
+      connectionState.value = newConnectionState;
+      if (_paused) {
+        _tryingConnect = false;
+      } else {
+        _retryTimer = Timer(Duration(seconds: 5), _tryConnect);
+      }
     }
   }
 
   void _restart() {
+    if (_tryingConnect) return;
+    _tryingConnect = true;
+    connectionState.value = MelvinConnectionState.notConnected;
+    _pendingSubmitTimeout?.cancel();
+    final pendingSubmit = _pendingSubmit;
+    _pendingSubmit = null;
+    pendingSubmit?.completeError(Exception("connection closed"));
     if (!_closed) {
       _downstreamSubscription?.cancel();
       _downstreamSubscription = null;
-      _protocolClient?.close();
-      _protocolClient = null;
       _tryConnect();
+    }
+  }
+
+  void pause() {
+    //_paused = true;
+    //_retryTimer?.cancel();
+    //_retryTimer = null;
+  }
+
+  void resume() {
+    //if (!_paused) return;
+    //_paused = false;
+    //if (connectionState.value != MelvinConnectionState.connectedToMachine) {
+    //  _restart();
+    //}
+  }
+
+  Future<void> _fetchMapImage() async {
+    if (mapImage.value == null) {
+      await _protocolClient.send(proto.Upstream(getFullImage: proto.Upstream_GetFullImage()));
+    } else {
+      await _protocolClient.send(proto.Upstream(getSnapshotImage: proto.Upstream_GetSnapshotDiffImage()));
+    }
+  }
+
+  Future<void> submitObjective(int objectiveId, Rect area) async {
+    if (_pendingSubmit != null) throw Exception("Concurrent submit");
+    _pendingSubmit = Completer();
+    _pendingSubmitTimeout = Timer(Duration(seconds: 10), () {
+      final pendingSubmit = _pendingSubmit;
+      _pendingSubmit = null;
+      if (pendingSubmit != null && !pendingSubmit.isCompleted) {
+        pendingSubmit.completeError(TimeoutException("timeout"));
+      }
+    });
+
+    await _protocolClient.send(
+      proto.Upstream(
+        submitObjective: proto.Upstream_SubmitObjective(
+          objectiveId: objectiveId,
+          offsetX: area.topLeft.dx.toInt(),
+          offsetY: area.topLeft.dy.toInt(),
+          width: area.width.toInt(),
+          height: area.height.toInt(),
+        ),
+      ),
+    );
+
+    final objectiveIdFromResult = await _pendingSubmit!.future;
+    if (objectiveIdFromResult != objectiveId) {
+      throw Exception("Mismatching objective ids");
     }
   }
 
@@ -107,6 +169,18 @@ class MelvinClient {
           objectivesPoints: 0,
         ),
       );
+    } else if (downstreamMessage.hasSubmitResult()) {
+      _pendingSubmitTimeout?.cancel();
+      final pendingSubmit = _pendingSubmit;
+      _pendingSubmit = null;
+      if (pendingSubmit != null && !pendingSubmit.isCompleted) {
+        final submitResult = downstreamMessage.submitResult;
+        if (submitResult.success) {
+          pendingSubmit.complete(submitResult.hasObjectiveId() ? submitResult.objectiveId : null);
+        } else {
+          pendingSubmit.completeError(Exception("Submit failed"));
+        }
+      }
     }
   }
 
@@ -120,19 +194,25 @@ class MelvinClient {
   @disposeMethod
   void dispose() {
     _closed = true;
+    _pendingSubmitTimeout?.cancel();
+    _pendingSubmitTimeout = null;
+    final pendingSubmit = _pendingSubmit;
+    _pendingSubmit = null;
+    pendingSubmit?.completeError(Exception("connection closed"));
     _downstreamSubscription?.cancel();
     _downstreamSubscription = null;
     _retryTimer?.cancel();
     _retryTimer = null;
-    _protocolClient?.close();
+    _protocolClient.close();
   }
 }
 
 abstract class MelvinProtocolClient {
-  final Stream<proto.Downstream> downstream;
+  Stream<Uint8List> get receiveStream;
 
-  MelvinProtocolClient._internal(Stream<Uint8List> stream)
-    : downstream = stream.transform(MessageParserStreamTransformer());
+  Stream<proto.Downstream> get downstream => receiveStream.transform(MessageParserStreamTransformer());
+
+  Future<MelvinConnectionState> tryConnect();
 
   Future<void> send(proto.Upstream upstreamProto) async {
     final payload = upstreamProto.writeToBuffer();
@@ -151,64 +231,103 @@ abstract class MelvinProtocolClient {
 }
 
 class LocalMelvinProtocolClient extends MelvinProtocolClient {
-  final Socket _socket;
+  Socket? _socket;
 
-  LocalMelvinProtocolClient._internal(this._socket) : super._internal(_socket);
-
-  static Future<LocalMelvinProtocolClient> connect() async {
-    final socket = await Socket.connect("localhost", 1337);
-    return LocalMelvinProtocolClient._internal(socket);
+  @override
+  Future<MelvinConnectionState> tryConnect() async {
+    try {
+      await _socket?.close();
+    } catch (e) {
+      // ignoring
+    }
+    try {
+      final socket = await Socket.connect("localhost", 1337);
+      _socket = socket;
+    } catch (e) {
+      return MelvinConnectionState.connectedToMachine;
+    }
+    return MelvinConnectionState.connectedToMachineAndMelvin;
   }
 
   @override
-  void _write(Uint8List data) => _socket.add(data);
+  void _write(Uint8List data) => _socket!.add(data);
 
   @override
-  Future<void> _flush() => _socket.flush();
+  Future<void> _flush() => _socket!.flush();
 
   @override
-  Future close() {
-    return _socket.close();
+  Future<void> close() async {
+    await _socket?.close();
   }
+
+  @override
+  Stream<Uint8List> get receiveStream => _socket!;
 }
 
 class SSHMelvinProtocolClient extends MelvinProtocolClient {
-  final SSHClient _sshClient;
-  final SSHForwardChannel _channel;
+  static const String stopMelvinCommand = "tmux kill-session -t melvin-runner";
+  static const String startMelvinCommand =
+      "cd /home && tmux new-session -d -s melvin-runner 'DRS_BASE_URL=http://10.100.10.3:33000 /home/melvin-ob'";
+  SSHClient? _sshClient;
+  SSHForwardChannel? _channel;
 
-  SSHMelvinProtocolClient._internal(this._sshClient, this._channel) : super._internal(_channel.stream);
+  @override
+  Future<MelvinConnectionState> tryConnect() async {
+    var sshClient = _sshClient;
+    if (sshClient == null || sshClient.isClosed) {
+      _channel = null;
+      _sshClient = null;
+      try {
+        final socket = await SSHSocket.connect('10.100.10.3', 22);
 
-  static Future<MelvinProtocolClient> connectSSH() async {
-    final client = SSHClient(
-      await SSHSocket.connect('10.100.10.3', 22),
-      username: 'root',
-      onPasswordRequest: () => 'password',
-    );
-
-    try {
-      final channel = await client.forwardLocal("localhost", 1337);
-      return SSHMelvinProtocolClient._internal(client, channel);
-    } catch (e) {
-      client.close();
-      rethrow;
+        sshClient = SSHClient(socket, username: 'root', onPasswordRequest: () => 'password');
+        _sshClient = sshClient;
+      } catch (e, stack) {
+        debugPrintStack(label: "Could not connect to ssh", stackTrace: stack);
+        return MelvinConnectionState.notConnected;
+      }
     }
+    _channel?.close();
+    final SSHForwardChannel channel;
+    try {
+      channel = await sshClient.forwardLocal("localhost", 1337);
+    } catch (e) {
+      try {
+        await startMelvinOb();
+      } catch (e, stack) {
+        debugPrintStack(label: "Could not start melvin", stackTrace: stack);
+      }
+      return MelvinConnectionState.connectedToMachine;
+    }
+    _channel = channel;
+    return MelvinConnectionState.connectedToMachineAndMelvin;
+  }
+
+  @override
+  Stream<Uint8List> get receiveStream => _channel!.stream;
+
+  Future<void> startMelvinOb() async {
+    final sshClient = _sshClient;
+    if (sshClient == null) return;
+    await sshClient.run(startMelvinCommand);
   }
 
   Future<void> restartMelvinOb() async {
-    final session = await _sshClient.execute("tmux kill-session -t melvin-runner; tmux new-session -d -s melvin-runner 'DRS_BASE_URL=http://10.100.10.3:33000 ./melvin-ob'");
-    session.close();
-    await session.done;
+    final sshClient = _sshClient;
+    if (sshClient == null) return;
+    await sshClient.run("$stopMelvinCommand;$startMelvinCommand");
   }
 
   @override
   void _write(Uint8List data) async {
-    _channel.sink.add(data);
+    if (_channel == null) throw Exception("Melvin not running");
+    _channel!.sink.add(data);
   }
 
   @override
-  Future close() async {
-    await _channel.close();
-    _sshClient.close();
+  Future<void> close() async {
+    await _channel?.close();
+    _sshClient?.close();
   }
 }
 

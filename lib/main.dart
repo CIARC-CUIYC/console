@@ -1,5 +1,3 @@
-import 'dart:math';
-
 import 'package:ciarc_console/model/objective.dart';
 import 'package:ciarc_console/service/ground_station_client.dart';
 import 'package:ciarc_console/service/melvin_client.dart';
@@ -34,8 +32,10 @@ class MyApp extends StatefulWidget {
   State<StatefulWidget> createState() => _MyAppState();
 }
 
-class _MyAppState extends State<MyApp> {
+class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   Rect? _highlightedArea;
+  final MelvinClient _melvinClient = getIt.get();
+
 
   @override
   void initState() {
@@ -49,34 +49,46 @@ class _MyAppState extends State<MyApp> {
       title: 'CIARC Console',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(colorScheme: ColorScheme.fromSeed(seedColor: Colors.lightGreen), useMaterial3: false),
-      home: OrientationBuilder(
-        builder: (context, orientation) {
-          if (orientation == Orientation.landscape) {
-            return Row(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Expanded(
-                  flex: 3,
-                  child: Scaffold(body: StatusPanel(highlightedArea: _highlightedArea, compact: false)),
-                ),
-                Expanded(
-                  flex: 2,
-                  child: AppTabs(
-                    compact: false,
-                    onObjectiveHover: _onObjectiveHover,
-                    highlightedArea: _highlightedArea,
+      home: SafeArea(
+        child: OrientationBuilder(
+          builder: (context, orientation) {
+            if (orientation == Orientation.landscape) {
+              return Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Expanded(
+                    flex: 3,
+                    child: Scaffold(body: StatusPanel(highlightedArea: _highlightedArea, compact: false)),
                   ),
-                ),
-              ],
-            );
-          } else {
-            return AppTabs(compact: true, onObjectiveHover: _onObjectiveHover, highlightedArea: _highlightedArea);
-          }
-        },
+                  Expanded(
+                    flex: 2,
+                    child: AppTabs(
+                      compact: false,
+                      onObjectiveHover: _onObjectiveHover,
+                      highlightedArea: _highlightedArea,
+                    ),
+                  ),
+                ],
+              );
+            } else {
+              return AppTabs(compact: true, onObjectiveHover: _onObjectiveHover, highlightedArea: _highlightedArea);
+            }
+          },
+        ),
       ),
     );
   }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if(state == AppLifecycleState.hidden) {
+      _melvinClient.pause();
+    } else if(state == AppLifecycleState.resumed) {
+      _melvinClient.resume();
+    }
+  }
+
 
   void _onObjectiveHover(ZonedObjective? objective) {
     final zone = objective?.zone;
