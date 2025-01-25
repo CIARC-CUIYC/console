@@ -36,7 +36,6 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   Rect? _highlightedArea;
   final MelvinClient _melvinClient = getIt.get();
 
-
   @override
   void initState() {
     getIt.get<MelvinClient>();
@@ -82,13 +81,12 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if(state == AppLifecycleState.hidden) {
+    if (state == AppLifecycleState.hidden) {
       _melvinClient.pause();
-    } else if(state == AppLifecycleState.resumed) {
+    } else if (state == AppLifecycleState.resumed) {
       _melvinClient.resume();
     }
   }
-
 
   void _onObjectiveHover(ZonedObjective? objective) {
     final zone = objective?.zone;
@@ -135,6 +133,7 @@ class _AppTabsState extends State<AppTabs> with SingleTickerProviderStateMixin {
     return Scaffold(
       body: TabBarView(
         controller: _tabController,
+        physics: tabIndex == -1 ? const NeverScrollableScrollPhysics() : null,
         children: [
           if (widget.compact) StatusPanel(highlightedArea: widget.highlightedArea, compact: true),
           ControlTab(),
@@ -149,6 +148,7 @@ class _AppTabsState extends State<AppTabs> with SingleTickerProviderStateMixin {
         labelColor: Colors.black54,
         labelStyle: TextStyle(fontSize: 13),
         labelPadding: EdgeInsets.zero,
+        physics: tabIndex == -1 ? const NeverScrollableScrollPhysics() : null,
         tabs: [
           if (widget.compact) Tab(text: "Map", icon: Icon(Icons.map_outlined)),
           Tab(text: "Control", icon: Icon(Icons.control_camera)),

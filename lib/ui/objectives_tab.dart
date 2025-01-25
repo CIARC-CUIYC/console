@@ -64,7 +64,7 @@ class _ObjectivesTabState extends State<ObjectivesTab> {
                   subtitle: Text("${_dateFormat.format(objective.start)} - ${_dateFormat.format(objective.end)}"),
                   trailing:
                   objective is ZonedObjective
-                      ? OutlinedButton.icon(icon: Icon(Icons.send), label: Text("Submit"), onPressed: () {
+                      ? OutlinedButton(child: Icon(Icons.send), onPressed: () {
                     _showSubmitObjectiveDialog(objective);
                   })
                       : null,

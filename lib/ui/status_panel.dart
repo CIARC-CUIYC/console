@@ -34,7 +34,8 @@ class StatusPanel extends StatelessWidget {
           body: _buildMap(telemetry),
           isDraggable: true,
           padding: EdgeInsets.zero,
-          maxHeight: 300,
+          maxHeight: 280,
+          minHeight: 60,
           panel: _buildInfoPanel(context, telemetry, connectionState),
         );
       } else {
