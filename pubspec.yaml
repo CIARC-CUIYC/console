@@ -17,6 +17,7 @@ dependencies:
   intl: any
   protobuf: ^3.1.0
   dartssh2: ^2.11.0
+  sliding_up_panel: ^2.0.0+1
 
 dev_dependencies:
   flutter_test:

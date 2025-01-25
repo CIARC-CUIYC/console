@@ -67,7 +67,7 @@ class MelvinClient {
       ).then((newImage) => mapImage.value = newImage);
       lastSnapshot++;
       if (lastSnapshot >= 2) {
-        _protocolClient?.send(proto.Upstream(createSnapshotImage: proto.Upstream_CreateSnapshotImage()));
+        //_protocolClient?.send(proto.Upstream(createSnapshotImage: proto.Upstream_CreateSnapshotImage()));
         lastSnapshot = 0;
       }
     } else if (downstreamMessage.hasTelemetry()) {
@@ -289,7 +289,8 @@ Future<ui.Image> _composeImage(int positionX, int positionY, Uint8List bytes, ui
 
     for (int newImageY = 0; newImageY < newImage.height; newImageY++) {
       for (int newImageX = 0; newImageX < newImage.width; newImageX++) {
-        final x = (newImageX + positionX) >= width ? newImageX - width : newImageX + positionX;
+        var x = newImageX + positionX;
+        if (x >= width) x -= width;
         final newPixel = newImagePixels[newImageCurrentOffset + newImageX];
         if (newPixel == 0) continue;
         oldImagePixels[oldImageCurrentOffset + x] = newPixel;
