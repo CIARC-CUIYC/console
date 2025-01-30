@@ -1,7 +1,10 @@
 import 'dart:ui' as ui;
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:zoom_widget/zoom_widget.dart';
+
+enum DraggedPoint { topLeft, topRight, bottomLeft, bottomRight }
 
 class MapWidget extends StatelessWidget {
   static const int mapHeight = 10800;
@@ -31,6 +34,7 @@ class MapWidget extends StatelessWidget {
             fit: StackFit.expand,
             children: [
               if (mapImage != null) RawImage(image: mapImage!, fit: BoxFit.fill),
+              ResizableHighlight(),
               if (satellite != null && satelliteVelocity != null)
                 CustomPaint(
                   painter: SatelliteTrajectoryPainter(satellite: satellite!, satelliteVelocity: satelliteVelocity!),
@@ -152,4 +156,108 @@ class SatelliteTrajectoryPainter extends CustomPainter {
   @override
   bool shouldRepaint(SatelliteTrajectoryPainter oldDelegate) =>
       oldDelegate.satellite != satellite || oldDelegate.satelliteVelocity != satelliteVelocity;
+}
+
+class ResizableHighlight extends StatefulWidget {
+  const ResizableHighlight({super.key});
+
+  @override
+  State<StatefulWidget> createState() => ResizableHighlightState();
+}
+
+class ResizableHighlightState extends State<ResizableHighlight> {
+  DraggedPoint? _draggedPoint;
+  Rect highlightArea = Rect.fromCenter(
+    center: Offset(MapWidget.mapWidth / 2, MapWidget.mapHeight / 2),
+    width: MapWidget.mapWidth / 4,
+    height: MapWidget.mapHeight / 4,
+  );
+  static const double dragRegistrationRadiusSquared = 150 * 150;
+
+  @override
+  Widget build(BuildContext context) {
+    return Listener(
+      behavior: HitTestBehavior.opaque,
+      onPointerDown: (details) {
+        final position = details.localPosition.scale(
+          1 / MapWidget.scaleFactorDisplaySpace,
+          1 / MapWidget.scaleFactorDisplaySpace,
+        );
+        if ((highlightArea.topLeft - position).distanceSquared <= dragRegistrationRadiusSquared) {
+          setState(() {
+            _draggedPoint = DraggedPoint.topRight;
+          });
+        } else if ((highlightArea.topRight - position).distanceSquared <= dragRegistrationRadiusSquared) {
+          setState(() {
+            _draggedPoint = DraggedPoint.topRight;
+          });
+        } else if ((highlightArea.bottomLeft - position).distanceSquared <= dragRegistrationRadiusSquared) {
+          setState(() {
+            _draggedPoint = DraggedPoint.bottomLeft;
+          });
+        } else if ((highlightArea.bottomRight - position).distanceSquared <= dragRegistrationRadiusSquared) {
+          setState(() {
+            _draggedPoint = DraggedPoint.bottomRight;
+          });
+        } else {
+          return;
+        }
+        // Hack the fight
+        WidgetsBinding.instance.gestureArena.add(details.pointer, NoopGestureArenaMember()).resolve(GestureDisposition.accepted);
+      },
+
+      onPointerMove: (details) {
+        if (_draggedPoint == null) return;
+        final position = details.localPosition.scale(
+          1 / MapWidget.scaleFactorDisplaySpace,
+          1 / MapWidget.scaleFactorDisplaySpace,
+        );
+        final positionClamped = Offset(
+          position.dx.clamp(0, MapWidget.mapWidth).toDouble(),
+          position.dy.clamp(0, MapWidget.mapHeight).toDouble(),
+        );
+
+        switch (_draggedPoint) {
+          case DraggedPoint.topLeft:
+            setState(() {
+              highlightArea = Rect.fromPoints(positionClamped,  highlightArea.bottomRight);
+            });
+            break;
+          case DraggedPoint.topRight:
+            setState(() {
+              highlightArea = Rect.fromPoints(positionClamped, highlightArea.bottomLeft);
+            });
+            break;
+          case DraggedPoint.bottomLeft:
+            setState(() {
+              highlightArea = Rect.fromPoints(positionClamped, highlightArea.topRight);
+            });
+            break;
+          case DraggedPoint.bottomRight:
+            setState(() {
+              highlightArea = Rect.fromPoints(positionClamped, highlightArea.topLeft);
+            });
+          case null:
+        }
+      },
+      onPointerUp: (details) {
+        _draggedPoint = null;
+      },
+      child: CustomPaint(painter: HighlightPainter(highlightArea: highlightArea)),
+    );
+  }
+}
+
+
+class NoopGestureArenaMember extends GestureArenaMember {
+  @override
+  void acceptGesture(int pointer) {
+    // TODO: implement acceptGesture
+  }
+
+  @override
+  void rejectGesture(int pointer) {
+    // TODO: implement rejectGesture
+  }
+
 }

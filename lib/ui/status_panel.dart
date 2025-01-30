@@ -31,7 +31,7 @@ class StatusPanel extends StatelessWidget {
       final connectionState = _melvinClient.connectionState.value;
       if (compact) {
         return SlidingUpPanel(
-          body: _buildMap(telemetry),
+          body: Padding(padding: EdgeInsets.only(bottom: 60), child: _buildMap(telemetry)),
           isDraggable: true,
           padding: EdgeInsets.zero,
           maxHeight: 280,

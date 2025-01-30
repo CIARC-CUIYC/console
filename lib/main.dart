@@ -58,14 +58,20 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
                 children: [
                   Expanded(
                     flex: 3,
-                    child: Scaffold(body: StatusPanel(highlightedArea: _highlightedArea, compact: false)),
+                    child: Material(child: StatusPanel(highlightedArea: _highlightedArea, compact: false)),
                   ),
                   Expanded(
                     flex: 2,
-                    child: AppTabs(
-                      compact: false,
-                      onObjectiveHover: _onObjectiveHover,
-                      highlightedArea: _highlightedArea,
+                    child: Navigator(
+                      onGenerateRoute:
+                          (route) => MaterialPageRoute(
+                            builder:
+                                (context) => AppTabs(
+                                  compact: false,
+                                  onObjectiveHover: _onObjectiveHover,
+                                  highlightedArea: _highlightedArea,
+                                ),
+                          ),
                     ),
                   ),
                 ],

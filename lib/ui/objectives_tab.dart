@@ -23,79 +23,79 @@ class _ObjectivesTabState extends State<ObjectivesTab> {
   Objective? _currentHover;
 
   @override
-  Widget build(BuildContext context) =>
-      ValueListenableBuilder(
-        valueListenable: _groundStationClient.objectives,
-        builder: (context, objectives, widget_) {
-          if (objectives == null) {
-            return Center(child: CircularProgressIndicator());
-          } else if (objectives.data.isEmpty) {
-            return Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                Text("No objectives available yet"),
-                TimeAgo(
-                    timestamp: objectives.timestamp, builder: (context, timeText) => Text("Last updated: $timeText")),
-              ],
+  Widget build(BuildContext context) => ValueListenableBuilder(
+    valueListenable: _groundStationClient.objectives,
+    builder: (context, objectives, widget_) {
+      if (objectives == null) {
+        return Center(child: CircularProgressIndicator());
+      } else if (objectives.data.isEmpty) {
+        return Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Text("No objectives available yet"),
+            TimeAgo(timestamp: objectives.timestamp, builder: (context, timeText) => Text("Last updated: $timeText")),
+          ],
+        );
+      }
+
+      final now = DateTime.now();
+
+      return ListView.separated(
+        itemBuilder: (context, index) {
+          if (index == objectives.data.length) {
+            return Container(
+              alignment: Alignment.center,
+              padding: EdgeInsets.symmetric(vertical: 10),
+              child: TimeAgo(
+                timestamp: objectives.timestamp,
+                builder: (context, timeText) => Text("Last updated: $timeText"),
+              ),
             );
           }
-
-          final now = DateTime.now();
-
-          return ListView.separated(
-            itemBuilder: (context, index) {
-              if (index == objectives.data.length) {
-                return Container(
-                  alignment: Alignment.center,
-                  padding: EdgeInsets.symmetric(vertical: 10),
-                  child: TimeAgo(
-                    timestamp: objectives.timestamp,
-                    builder: (context, timeText) => Text("Last updated: $timeText"),
-                  ),
-                );
-              }
-              final objective = objectives.data[index];
-              return MouseRegion(
-                child: ListTile(
-                  textColor: now.isAfter(objective.end) ? Colors.grey : null,
-                  leading: Icon(objective is BeaconObjective ? Icons.my_location_outlined : Icons.crop),
-                  title: Text(objective.name),
-                  subtitle: Text("${_dateFormat.format(objective.start)} - ${_dateFormat.format(objective.end)}"),
-                  trailing:
+          final objective = objectives.data[index];
+          return MouseRegion(
+            child: ListTile(
+              textColor: now.isAfter(objective.end) ? Colors.grey : null,
+              leading: Icon(objective is BeaconObjective ? Icons.my_location_outlined : Icons.crop),
+              title: Text(objective.name),
+              subtitle: Text("${_dateFormat.format(objective.start)} - ${_dateFormat.format(objective.end)}"),
+              trailing:
                   objective is ZonedObjective
-                      ? OutlinedButton(child: Icon(Icons.send), onPressed: () {
-                    _showSubmitObjectiveDialog(objective);
-                  })
+                      ? OutlinedButton(
+                        child: Icon(Icons.send),
+                        onPressed: () {
+                          _showSubmitObjectivePage(objective);
+                        },
+                      )
                       : null,
-                  onTap: () => _showDetailsSheet(objective),
-                ),
-                onEnter: (value) {
-                  if (objective is ZonedObjective) {
-                    _currentHover = objective;
-                    widget.onHover(objective);
-                  }
-                },
-                onExit: (value) {
-                  if (_currentHover == objective) {
-                    _currentHover = null;
-                    widget.onHover(null);
-                  }
-                },
-              );
+              onTap: () => _showDetailsSheet(objective),
+            ),
+            onEnter: (value) {
+              if (objective is ZonedObjective) {
+                _currentHover = objective;
+                widget.onHover(objective);
+              }
             },
-            separatorBuilder: (context, index) => Divider(indent: 5, height: 2, thickness: 1),
-            itemCount: objectives.data.length + 1,
+            onExit: (value) {
+              if (_currentHover == objective) {
+                _currentHover = null;
+                widget.onHover(null);
+              }
+            },
           );
         },
+        separatorBuilder: (context, index) => Divider(indent: 5, height: 2, thickness: 1),
+        itemCount: objectives.data.length + 1,
       );
+    },
+  );
 
   void _showDetailsSheet(Objective objective) {
     showModalBottomSheet(
       context: context,
       builder:
-          (context) =>
-          Padding(
+          (context) => Padding(
             padding: EdgeInsets.all(10),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -132,22 +132,21 @@ class _ObjectivesTabState extends State<ObjectivesTab> {
     );
   }
 
-  void _showSubmitObjectiveDialog(ZonedObjective objective) {
-    showDialog(context: context, builder: (context) => _SubmitObjectiveDialog(objective: objective));
+  void _showSubmitObjectivePage(ZonedObjective objective) {
+    Navigator.of(context).push(MaterialPageRoute(builder: (context) => _SubmitObjectivePage(objective: objective)));
   }
 }
 
-class _SubmitObjectiveDialog extends StatefulWidget {
+class _SubmitObjectivePage extends StatefulWidget {
   final ZonedObjective objective;
 
-  const _SubmitObjectiveDialog({required this.objective});
+  const _SubmitObjectivePage({required this.objective});
 
   @override
-  State<StatefulWidget> createState() => _SubmitObjectiveDialogState();
-
+  State<StatefulWidget> createState() => _SubmitObjectivePageState();
 }
 
-class _SubmitObjectiveDialogState extends State<_SubmitObjectiveDialog> {
+class _SubmitObjectivePageState extends State<_SubmitObjectivePage> {
   final GroundStationClient _groundStationClient = getIt.get();
   final MelvinClient _melvinClient = getIt.get();
   late Rect area;
@@ -161,21 +160,24 @@ class _SubmitObjectiveDialogState extends State<_SubmitObjectiveDialog> {
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(title: Text("Submit objective #${widget.objective.id} - ${widget.objective.name}"),
-      actions: [
-        TextButton(
-          onPressed: _processing ? null : () {
-            _submit();
-          },
-          child: _processing ? CircularProgressIndicator() : const Text('Ok'),
-        ),
-        TextButton(
-          onPressed: _processing ? null : () {
-            Navigator.of(context).pop();
-          },
-          child: const Text('Cancel'),
-        )
-      ],);
+    return Scaffold(
+      appBar: AppBar(
+          leading: BackButton(),
+          title: Text("Submit objective #${widget.objective.id} - ${widget.objective.name}")),
+      body: Column(
+        children: [
+          TextButton(
+            onPressed:
+                _processing
+                    ? null
+                    : () {
+                      _submit();
+                    },
+            child: _processing ? CircularProgressIndicator() : const Text('Submit'),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _submit() async {
@@ -196,7 +198,7 @@ class _SubmitObjectiveDialogState extends State<_SubmitObjectiveDialog> {
     final ctx = context;
     if (ctx.mounted) {
       final String resultMessage;
-      if(success) {
+      if (success) {
         resultMessage = "Submit objective successfully";
       } else {
         resultMessage = "Failed to submit objective";
@@ -206,5 +208,4 @@ class _SubmitObjectiveDialogState extends State<_SubmitObjectiveDialog> {
     }
     _groundStationClient.refresh();
   }
-
 }

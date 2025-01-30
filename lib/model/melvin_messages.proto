@@ -42,6 +42,7 @@ message Downstream {
     Image image = 2;
     Telemetry telemetry = 3;
     SubmitResult submit_result = 4;
+    TaskList task_list = 5;
   }
 
   message Pong {
@@ -73,6 +74,37 @@ message Downstream {
   message SubmitResult {
     bool success = 1;
     optional uint32 objectiveId = 2;
+  }
+
+  message TaskList {
+    repeated Task task= 1;
+  }
+}
+
+message Task {
+  int64 scheduled_on = 1;
+  oneof content {
+    TakeImage takeImage = 2;
+    SatelliteState switchState = 3;
+    BurnSequence velocityChange = 4;
+  }
+
+  message TakeImage {
+    enum CameraLens {
+        narrow = 0;
+        normal= 1;
+        wide = 2;
+    }
+
+    optional uint32 actualPositionX = 1;
+    optional uint32 actualPositionY = 2;
+    uint32 plannedPositionX = 3;
+    uint32 plannedPositionY = 4;
+    CameraLens lens = 5;
+  }
+
+  message BurnSequence {
+
   }
 }
 
