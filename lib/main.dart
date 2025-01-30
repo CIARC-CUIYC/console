@@ -4,6 +4,7 @@ import 'package:ciarc_console/service/melvin_client.dart';
 import 'package:ciarc_console/ui/achievements_tab.dart';
 import 'package:ciarc_console/ui/announcements_tab.dart';
 import 'package:ciarc_console/ui/control_tab.dart';
+import 'package:ciarc_console/ui/map_widget.dart';
 import 'package:ciarc_console/ui/objectives_tab.dart';
 import 'package:ciarc_console/ui/status_panel.dart';
 import 'package:flutter/material.dart';
@@ -34,6 +35,8 @@ class MyApp extends StatefulWidget {
 
 class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   Rect? _highlightedArea;
+  void Function(Rect)? _onHighlightedAreaResized;
+
   final MelvinClient _melvinClient = getIt.get();
 
   @override
@@ -58,7 +61,13 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
                 children: [
                   Expanded(
                     flex: 3,
-                    child: Material(child: StatusPanel(highlightedArea: _highlightedArea, compact: false)),
+                    child: Material(
+                      child: StatusPanel(
+                        highlightedArea: _highlightedArea,
+                        onHighlightAreaResized: _onHighlightedAreaResized,
+                        compact: false,
+                      ),
+                    ),
                   ),
                   Expanded(
                     flex: 2,
@@ -70,6 +79,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
                                   compact: false,
                                   onObjectiveHover: _onObjectiveHover,
                                   highlightedArea: _highlightedArea,
+                                  registerResizableObjective: _registerResizableObjective,
                                 ),
                           ),
                     ),
@@ -104,14 +114,37 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       }
     });
   }
+
+  void _registerResizableObjective(void Function(Rect)? onResize) {
+    setState(() {
+      if (onResize == null) {
+        _highlightedArea = null;
+        _onHighlightedAreaResized = null;
+      } else {
+        _highlightedArea = Rect.fromCenter(
+          center: Offset(MapWidget.mapWidth / 2, MapWidget.mapHeight / 2),
+          width: MapWidget.mapWidth / 4,
+          height: MapWidget.mapHeight / 4,
+        );
+        _onHighlightedAreaResized = onResize;
+      }
+    });
+  }
 }
 
 class AppTabs extends StatefulWidget {
   final bool compact;
   final void Function(ZonedObjective? objective) onObjectiveHover;
+  final void Function(HighlightResizedListener?)? registerResizableObjective;
   final Rect? highlightedArea;
 
-  const AppTabs({super.key, required this.compact, required this.onObjectiveHover, this.highlightedArea});
+  const AppTabs({
+    super.key,
+    required this.compact,
+    required this.onObjectiveHover,
+    this.highlightedArea,
+    this.registerResizableObjective,
+  });
 
   @override
   State<StatefulWidget> createState() => _AppTabsState();
@@ -144,7 +177,10 @@ class _AppTabsState extends State<AppTabs> with SingleTickerProviderStateMixin {
           if (widget.compact) StatusPanel(highlightedArea: widget.highlightedArea, compact: true),
           ControlTab(),
           SlotsTab(),
-          ObjectivesTab(onHover: widget.onObjectiveHover),
+          ObjectivesTab(
+            onHover: widget.onObjectiveHover,
+            registerResizableObjective: widget.registerResizableObjective,
+          ),
           AchievementsTab(),
           AnnouncementsTab(),
         ],

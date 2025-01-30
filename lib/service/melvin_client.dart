@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
+import 'package:ciarc_console/model/task.dart';
 import 'package:ciarc_console/model/telemetry.dart';
 import 'package:dartssh2/dartssh2.dart';
 import 'package:flutter/foundation.dart';
@@ -17,10 +18,12 @@ enum MelvinConnectionState { notConnected, connectedToMachine, connectedToMachin
 @singleton
 class MelvinClient {
   final MelvinProtocolClient _protocolClient = SSHMelvinProtocolClient();
+  //final MelvinProtocolClient _protocolClient = LocalMelvinProtocolClient();
   Timer? _retryTimer;
   StreamSubscription<proto.Downstream>? _downstreamSubscription;
   ValueNotifier<ui.Image?> mapImage = ValueNotifier(null);
   ValueNotifier<RemoteData<Telemetry>?> telemetry = ValueNotifier(null);
+  ValueNotifier<RemoteData<List<Task>>?> tasks = ValueNotifier(null);
   ValueNotifier<MelvinConnectionState> connectionState = ValueNotifier(MelvinConnectionState.notConnected);
   bool _closed = false;
   int lastSnapshot = 0;
@@ -134,31 +137,11 @@ class MelvinClient {
       }
     } else if (downstreamMessage.hasTelemetry()) {
       final telemetryMessage = downstreamMessage.telemetry;
-      SatelliteState mapState(proto.SatelliteState state) {
-        switch (state) {
-          case proto.SatelliteState.acquisition:
-            return SatelliteState.acquisition;
-          case proto.SatelliteState.charge:
-            return SatelliteState.charge;
-          case proto.SatelliteState.communication:
-            return SatelliteState.communication;
-          case proto.SatelliteState.deployment:
-            return SatelliteState.deployment;
-
-          case proto.SatelliteState.safe:
-            return SatelliteState.safe;
-          case proto.SatelliteState.transition:
-            return SatelliteState.transition;
-          case proto.SatelliteState.none:
-          default:
-            return SatelliteState.none;
-        }
-      }
 
       telemetry.value = RemoteData(
         timestamp: DateTime.fromMillisecondsSinceEpoch(telemetryMessage.timestamp.toInt()),
         data: Telemetry(
-          state: mapState(telemetryMessage.state),
+          state: _mapState(telemetryMessage.state),
           position: Offset(telemetryMessage.positionX.toDouble(), telemetryMessage.positionY.toDouble()),
           velocity: Offset(telemetryMessage.velocityX.toDouble(), telemetryMessage.velocityY.toDouble()),
           battery: telemetryMessage.battery,
@@ -181,9 +164,57 @@ class MelvinClient {
           pendingSubmit.completeError(Exception("Submit failed"));
         }
       }
+    } else if (downstreamMessage.hasTaskList()) {
+      final taskMessages = downstreamMessage.taskList.task;
+      final tasks = <Task>[];
+      for (final task in taskMessages) {
+        final scheduledOn = DateTime.fromMillisecondsSinceEpoch(task.scheduledOn.toInt());
+        if (task.hasTakeImage()) {
+          final takeImage = task.takeImage;
+          tasks.add(
+            TakeImageTask(
+              scheduledOn: scheduledOn,
+              plannedPosition: Offset(takeImage.plannedPositionX.toDouble(), takeImage.plannedPositionY.toDouble()),
+              actualPosition:
+                  takeImage.hasActualPositionX() && takeImage.hasActualPositionY()
+                      ? Offset(takeImage.actualPositionX.toDouble(), takeImage.actualPositionY.toDouble())
+                      : null,
+            ),
+          );
+        } else if(task.hasSwitchState()) {
+          tasks.add(
+            SwitchStateTask(scheduledOn: scheduledOn, newState: _mapState(task.switchState))
+          );
+        } else if(task.hasVelocityChange()) {
+          tasks.add(
+              ChangeVelocityTask(scheduledOn: scheduledOn)
+          );
+        }
+      }
+      this.tasks.value = RemoteData(timestamp: DateTime.now(), data: tasks);
     }
   }
 
+  SatelliteState _mapState(proto.SatelliteState state) {
+    switch (state) {
+      case proto.SatelliteState.acquisition:
+        return SatelliteState.acquisition;
+      case proto.SatelliteState.charge:
+        return SatelliteState.charge;
+      case proto.SatelliteState.communication:
+        return SatelliteState.communication;
+      case proto.SatelliteState.deployment:
+        return SatelliteState.deployment;
+
+      case proto.SatelliteState.safe:
+        return SatelliteState.safe;
+      case proto.SatelliteState.transition:
+        return SatelliteState.transition;
+      case proto.SatelliteState.none:
+      default:
+        return SatelliteState.none;
+    }
+  }
   Future<void> restartMelvinOb() async {
     final protocolClient = _protocolClient;
     if (protocolClient is SSHMelvinProtocolClient) {

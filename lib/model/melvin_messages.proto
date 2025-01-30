@@ -77,7 +77,7 @@ message Downstream {
   }
 
   message TaskList {
-    repeated Task task= 1;
+    repeated Task task = 1;
   }
 }
 
@@ -91,9 +91,9 @@ message Task {
 
   message TakeImage {
     enum CameraLens {
-        narrow = 0;
-        normal= 1;
-        wide = 2;
+      narrow = 0;
+      normal = 1;
+      wide = 2;
     }
 
     optional uint32 actualPositionX = 1;

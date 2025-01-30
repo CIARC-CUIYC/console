@@ -11,11 +11,12 @@ import 'time_ago.dart';
 
 class StatusPanel extends StatelessWidget {
   final Rect? highlightedArea;
+  final HighlightResizedListener? onHighlightAreaResized;
   final bool compact;
   final GroundStationClient _groundStationClient = getIt.get();
   final MelvinClient _melvinClient = getIt.get();
 
-  StatusPanel({super.key, this.highlightedArea, required this.compact});
+  StatusPanel({super.key, this.highlightedArea, required this.compact, this.onHighlightAreaResized});
 
   @override
   Widget build(BuildContext context) => ListenableBuilder(
@@ -51,6 +52,7 @@ class StatusPanel extends StatelessWidget {
   Widget _buildMap(RemoteData<Telemetry>? telemetry) => MapWidget(
     mapImage: _melvinClient.mapImage.value,
     highlightArea: highlightedArea,
+    onHighlightAreaResized: onHighlightAreaResized,
     satellite: telemetry?.data.position,
     satelliteVelocity: telemetry?.data.velocity,
   );

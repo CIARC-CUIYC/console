@@ -1,3 +1,4 @@
+import 'dart:math';
 import 'dart:ui' as ui;
 
 import 'package:flutter/gestures.dart';
@@ -12,14 +13,23 @@ class MapWidget extends StatelessWidget {
   static const double scaleFactorDisplaySpace = 1 / 25;
   static const double mapHeightDisplaySpace = mapHeight * scaleFactorDisplaySpace;
   static const double mapWidthDisplaySpace = mapWidth * scaleFactorDisplaySpace;
-  static const double sateliteSize = 25;
+  static const double satelliteSize = 25;
 
   final Rect? highlightArea;
+  final HighlightResizedListener? onHighlightAreaResized;
+
   final Offset? satellite;
   final Offset? satelliteVelocity;
   final ui.Image? mapImage;
 
-  const MapWidget({super.key, this.mapImage, this.highlightArea, this.satellite, this.satelliteVelocity});
+  const MapWidget({
+    super.key,
+    this.mapImage,
+    this.highlightArea,
+    this.satellite,
+    this.satelliteVelocity,
+    this.onHighlightAreaResized,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -34,24 +44,26 @@ class MapWidget extends StatelessWidget {
             fit: StackFit.expand,
             children: [
               if (mapImage != null) RawImage(image: mapImage!, fit: BoxFit.fill),
-              ResizableHighlight(),
               if (satellite != null && satelliteVelocity != null)
                 CustomPaint(
                   painter: SatelliteTrajectoryPainter(satellite: satellite!, satelliteVelocity: satelliteVelocity!),
                 ),
-              if (highlightArea != null) CustomPaint(painter: HighlightPainter(highlightArea: highlightArea!)),
+              if (highlightArea != null && onHighlightAreaResized == null)
+                CustomPaint(painter: HighlightPainter(highlightArea: highlightArea!))
+              else if (highlightArea != null && onHighlightAreaResized != null)
+                ResizableHighlight(highlightArea: highlightArea!, onResized: onHighlightAreaResized!),
               if (satellite != null)
                 Positioned(
-                  left: satellite!.dx * scaleFactorDisplaySpace - sateliteSize / 2,
-                  top: satellite!.dy * scaleFactorDisplaySpace - sateliteSize / 2,
-                  width: sateliteSize,
-                  height: sateliteSize,
+                  left: satellite!.dx * scaleFactorDisplaySpace - satelliteSize / 2,
+                  top: satellite!.dy * scaleFactorDisplaySpace - satelliteSize / 2,
+                  width: satelliteSize,
+                  height: satelliteSize,
                   child: Container(
                     decoration: BoxDecoration(
                       color: Colors.blue,
-                      borderRadius: BorderRadius.circular(sateliteSize / 2),
+                      borderRadius: BorderRadius.circular(satelliteSize / 2),
                     ),
-                    child: Icon(Icons.satellite_alt, size: sateliteSize - 7, color: Colors.white),
+                    child: Icon(Icons.satellite_alt, size: satelliteSize - 7, color: Colors.white),
                   ),
                 ),
             ],
@@ -158,106 +170,121 @@ class SatelliteTrajectoryPainter extends CustomPainter {
       oldDelegate.satellite != satellite || oldDelegate.satelliteVelocity != satelliteVelocity;
 }
 
+typedef HighlightResizedListener = void Function(Rect);
 class ResizableHighlight extends StatefulWidget {
-  const ResizableHighlight({super.key});
+  final Rect highlightArea;
+  final HighlightResizedListener onResized;
+
+  const ResizableHighlight({super.key, required this.highlightArea, required this.onResized});
 
   @override
   State<StatefulWidget> createState() => ResizableHighlightState();
 }
 
 class ResizableHighlightState extends State<ResizableHighlight> {
-  DraggedPoint? _draggedPoint;
-  Rect highlightArea = Rect.fromCenter(
-    center: Offset(MapWidget.mapWidth / 2, MapWidget.mapHeight / 2),
-    width: MapWidget.mapWidth / 4,
-    height: MapWidget.mapHeight / 4,
-  );
-  static const double dragRegistrationRadiusSquared = 150 * 150;
+  static const double dragRegistrationRadiusSquared = 50 * 50;
+  Offset? _draggedPoint;
+  late Rect _highlightArea;
+
+  @override
+  void initState() {
+    _highlightArea = widget.highlightArea;
+    super.initState();
+  }
+
+
+  Offset _normalizeToPointerSpace(Offset offset) => Offset(
+    (offset.dx + MapWidget.mapWidth) % MapWidget.mapWidth,
+    (offset.dy + MapWidget.mapHeight) % MapWidget.mapHeight,
+  ).scale(MapWidget.scaleFactorDisplaySpace, MapWidget.scaleFactorDisplaySpace);
 
   @override
   Widget build(BuildContext context) {
     return Listener(
       behavior: HitTestBehavior.opaque,
       onPointerDown: (details) {
-        final position = details.localPosition.scale(
-          1 / MapWidget.scaleFactorDisplaySpace,
-          1 / MapWidget.scaleFactorDisplaySpace,
-        );
-        if ((highlightArea.topLeft - position).distanceSquared <= dragRegistrationRadiusSquared) {
+        final position = details.localPosition;
+
+        if ((_normalizeToPointerSpace(_highlightArea.topLeft) - position).distanceSquared <=
+            dragRegistrationRadiusSquared) {
           setState(() {
-            _draggedPoint = DraggedPoint.topRight;
+            _draggedPoint = _highlightArea.topLeft;
           });
-        } else if ((highlightArea.topRight - position).distanceSquared <= dragRegistrationRadiusSquared) {
+        } else if ((_normalizeToPointerSpace(_highlightArea.topRight) - position).distanceSquared <=
+            dragRegistrationRadiusSquared) {
           setState(() {
-            _draggedPoint = DraggedPoint.topRight;
+            _draggedPoint = _highlightArea.topRight;
           });
-        } else if ((highlightArea.bottomLeft - position).distanceSquared <= dragRegistrationRadiusSquared) {
+        } else if ((_normalizeToPointerSpace(_highlightArea.bottomLeft) - position).distanceSquared <=
+            dragRegistrationRadiusSquared) {
           setState(() {
-            _draggedPoint = DraggedPoint.bottomLeft;
+            _draggedPoint = _highlightArea.bottomLeft;
           });
-        } else if ((highlightArea.bottomRight - position).distanceSquared <= dragRegistrationRadiusSquared) {
+        } else if ((_normalizeToPointerSpace(_highlightArea.bottomRight) - position).distanceSquared <=
+            dragRegistrationRadiusSquared) {
           setState(() {
-            _draggedPoint = DraggedPoint.bottomRight;
+            _draggedPoint = _highlightArea.bottomRight;
           });
         } else {
           return;
         }
         // Hack the fight
-        WidgetsBinding.instance.gestureArena.add(details.pointer, NoopGestureArenaMember()).resolve(GestureDisposition.accepted);
+        WidgetsBinding.instance.gestureArena
+            .add(details.pointer, NoopGestureArenaMember())
+            .resolve(GestureDisposition.accepted);
       },
 
       onPointerMove: (details) {
         if (_draggedPoint == null) return;
-        final position = details.localPosition.scale(
+        final delta = details.localDelta.scale(
           1 / MapWidget.scaleFactorDisplaySpace,
           1 / MapWidget.scaleFactorDisplaySpace,
-        );
-        final positionClamped = Offset(
-          position.dx.clamp(0, MapWidget.mapWidth).toDouble(),
-          position.dy.clamp(0, MapWidget.mapHeight).toDouble(),
         );
 
-        switch (_draggedPoint) {
-          case DraggedPoint.topLeft:
-            setState(() {
-              highlightArea = Rect.fromPoints(positionClamped,  highlightArea.bottomRight);
-            });
-            break;
-          case DraggedPoint.topRight:
-            setState(() {
-              highlightArea = Rect.fromPoints(positionClamped, highlightArea.bottomLeft);
-            });
-            break;
-          case DraggedPoint.bottomLeft:
-            setState(() {
-              highlightArea = Rect.fromPoints(positionClamped, highlightArea.topRight);
-            });
-            break;
-          case DraggedPoint.bottomRight:
-            setState(() {
-              highlightArea = Rect.fromPoints(positionClamped, highlightArea.topLeft);
-            });
-          case null:
+        Rect normalizeRect(Rect rect) => Rect.fromLTWH(
+          (rect.left + MapWidget.mapWidth) % MapWidget.mapWidth,
+          (rect.top + MapWidget.mapHeight) % MapWidget.mapHeight,
+          min(rect.width, MapWidget.mapWidth.toDouble()),
+          min(rect.height, MapWidget.mapHeight.toDouble()),
+        );
+
+        if (_draggedPoint == _highlightArea.topLeft) {
+          setState(() {
+            _highlightArea = normalizeRect(Rect.fromPoints(_highlightArea.topLeft + delta, _highlightArea.bottomRight));
+            _draggedPoint = _highlightArea.topLeft;
+          });
+        } else if (_draggedPoint == _highlightArea.topRight) {
+          setState(() {
+            _highlightArea = normalizeRect(Rect.fromPoints(_highlightArea.topRight + delta, _highlightArea.bottomLeft));
+            _draggedPoint = _highlightArea.topRight;
+          });
+        } else if (_draggedPoint == _highlightArea.bottomLeft) {
+          setState(() {
+            _highlightArea = normalizeRect(Rect.fromPoints(_highlightArea.bottomLeft + delta, _highlightArea.topRight));
+            _draggedPoint = _highlightArea.bottomLeft;
+          });
+        } else if (_draggedPoint == _highlightArea.bottomRight) {
+          setState(() {
+            _highlightArea = normalizeRect(Rect.fromPoints(_highlightArea.bottomRight + delta, _highlightArea.topLeft));
+            _draggedPoint = _highlightArea.bottomRight;
+          });
+        } else {
+          return;
         }
+        widget.onResized(_highlightArea);
       },
       onPointerUp: (details) {
         _draggedPoint = null;
       },
-      child: CustomPaint(painter: HighlightPainter(highlightArea: highlightArea)),
+      child: CustomPaint(painter: HighlightPainter(highlightArea: _highlightArea)),
     );
   }
 }
 
-
 class NoopGestureArenaMember extends GestureArenaMember {
   @override
-  void acceptGesture(int pointer) {
-    // TODO: implement acceptGesture
-  }
+  void acceptGesture(int pointer) {}
 
   @override
-  void rejectGesture(int pointer) {
-    // TODO: implement rejectGesture
-  }
-
+  void rejectGesture(int pointer) {}
 }

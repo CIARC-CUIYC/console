@@ -1,4 +1,5 @@
 import 'package:ciarc_console/service/melvin_client.dart';
+import 'package:ciarc_console/ui/map_widget.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
@@ -9,8 +10,9 @@ import 'time_ago.dart';
 
 class ObjectivesTab extends StatefulWidget {
   final void Function(ZonedObjective? objective) onHover;
+  final void Function(HighlightResizedListener?)? registerResizableObjective;
 
-  const ObjectivesTab({super.key, required this.onHover});
+  const ObjectivesTab({super.key, required this.onHover, this.registerResizableObjective});
 
   @override
   State<StatefulWidget> createState() => _ObjectivesTabState();
@@ -133,14 +135,23 @@ class _ObjectivesTabState extends State<ObjectivesTab> {
   }
 
   void _showSubmitObjectivePage(ZonedObjective objective) {
-    Navigator.of(context).push(MaterialPageRoute(builder: (context) => _SubmitObjectivePage(objective: objective)));
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder:
+            (context) => _SubmitObjectivePage(
+              objective: objective,
+              registerResizableObjective: widget.registerResizableObjective,
+            ),
+      ),
+    );
   }
 }
 
 class _SubmitObjectivePage extends StatefulWidget {
   final ZonedObjective objective;
+  final void Function(HighlightResizedListener?)? registerResizableObjective;
 
-  const _SubmitObjectivePage({required this.objective});
+  const _SubmitObjectivePage({required this.objective, this.registerResizableObjective});
 
   @override
   State<StatefulWidget> createState() => _SubmitObjectivePageState();
@@ -149,31 +160,47 @@ class _SubmitObjectivePage extends StatefulWidget {
 class _SubmitObjectivePageState extends State<_SubmitObjectivePage> {
   final GroundStationClient _groundStationClient = getIt.get();
   final MelvinClient _melvinClient = getIt.get();
-  late Rect area;
+  Rect? _area;
   bool _processing = false;
 
   @override
   void initState() {
     super.initState();
-    area = widget.objective.zone;
+    if (widget.objective.zone is Rect) {
+      _area = widget.objective.zone;
+    } else {
+      Future(() {
+        // TODO cleanup!!!
+        widget.registerResizableObjective?.call((area) {
+          setState(() {
+            _area = area;
+          });
+        });
+      });
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-          leading: BackButton(),
-          title: Text("Submit objective #${widget.objective.id} - ${widget.objective.name}")),
+        leading: BackButton(),
+        title: Text("Submit objective #${widget.objective.id} - ${widget.objective.name}"),
+      ),
       body: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          TextButton(
-            onPressed:
-                _processing
-                    ? null
-                    : () {
-                      _submit();
-                    },
-            child: _processing ? CircularProgressIndicator() : const Text('Submit'),
+          Padding(
+            padding: EdgeInsets.all(5),
+            child: ElevatedButton(
+              onPressed:
+                  (_processing || _area == null)
+                      ? null
+                      : () {
+                        _submit();
+                      },
+              child: _processing ? CircularProgressIndicator() : const Text('Submit'),
+            ),
           ),
         ],
       ),
@@ -188,7 +215,7 @@ class _SubmitObjectivePageState extends State<_SubmitObjectivePage> {
 
     bool success;
     try {
-      await _melvinClient.submitObjective(widget.objective.id!, area);
+      await _melvinClient.submitObjective(widget.objective.id!, _area!);
       success = true;
     } catch (e, stack) {
       debugPrintStack(label: "Submitting Objective failed", stackTrace: stack);
