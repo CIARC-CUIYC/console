@@ -43,7 +43,7 @@ message Downstream {
     Image image = 2;
     Telemetry telemetry = 3;
     SubmitResult submit_result = 4;
-    TaskList task_list = 5;
+    TaskList task_list = 6;
   }
 
   message Pong {

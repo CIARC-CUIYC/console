@@ -52,7 +52,7 @@ class _ControlTabState extends State<ControlTab> {
               return Center(child: Text("No tasks known"));
             } else {
               final tasks = tasksData.data;
-              return ListView.separated(
+              return  Expanded(child: ListView.separated(
                 itemBuilder: (context, index) {
                   if (index == tasks.length) {
                     return Container(
@@ -72,7 +72,7 @@ class _ControlTabState extends State<ControlTab> {
                     description = task.plannedPosition.toString();
                   } else if(task is SwitchStateTask) {
                     icon = Icons.swap_horiz;
-                    description = task.newState.toString();
+                    description = task.newState.name;
                   } else if(task is ChangeVelocityTask) {
                     icon = Icons.rocket_launch;
                     description = "Velocity Change";
@@ -83,8 +83,8 @@ class _ControlTabState extends State<ControlTab> {
                 },
 
                 separatorBuilder: (context, index) => Divider(indent: 5, height: 2, thickness: 1),
-                itemCount: tasks.length,
-              );
+                itemCount: tasks.length + 1,
+              ));
             }
           },
         ),
