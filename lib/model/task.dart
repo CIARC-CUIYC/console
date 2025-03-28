@@ -22,5 +22,7 @@ class SwitchStateTask extends Task {
 }
 
 class ChangeVelocityTask extends Task {
-  ChangeVelocityTask({required super.scheduledOn});
+  final List<Offset> positions;
+
+  ChangeVelocityTask({required super.scheduledOn, required this.positions});
 }

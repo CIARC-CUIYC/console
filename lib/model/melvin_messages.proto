@@ -7,8 +7,9 @@ message Upstream {
     GetFullImage get_full_image = 2;
     GetSnapshotDiffImage get_snapshot_image = 3;
     CreateSnapshotImage create_snapshot_image = 4;
-    SubmitObjective submit_objective = 5;
+    ObjectiveArea submit_objective = 5;
     SubmitDailyMap submit_daily_map = 6;
+    ObjectiveArea schedule_objective = 7;
   }
 
   message Ping {
@@ -24,7 +25,7 @@ message Upstream {
   message CreateSnapshotImage {
   }
 
-  message SubmitObjective {
+  message ObjectiveArea {
     uint32 objectiveId = 1;
     uint32 width = 2;
     uint32 height = 3;
@@ -104,7 +105,25 @@ message Task {
   }
 
   message BurnSequence {
-
+    enum VelocityChangeTaskRationale {
+      Correctional = 0;
+      OrbitEscape = 1;
+      OrbitEnter = 2;
+    }
+    VelocityChangeTaskRationale rational = 1;
+    uint32 target_x = 2;
+    uint32 target_y = 3;
+    optional uint32 add_target_x = 4;
+    optional uint32 add_target_y = 5;
+    repeated uint32 position_x = 6;
+    repeated uint32 position_y = 7;
+    repeated float velocity_x = 8;
+    repeated float velocity_y = 9;
+    uint32 acc_dt  = 10;
+    uint32 detumble_dt = 11;
+    float rem_angle_dev = 12;
+    float min_charge = 13;
+    float min_fuel = 14;
   }
 }
 

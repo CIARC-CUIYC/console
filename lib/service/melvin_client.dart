@@ -18,6 +18,7 @@ enum MelvinConnectionState { notConnected, connectedToMachine, connectedToMachin
 @singleton
 class MelvinClient {
   final MelvinProtocolClient _protocolClient = SSHMelvinProtocolClient();
+
   //final MelvinProtocolClient _protocolClient = LocalMelvinProtocolClient();
   Timer? _retryTimer;
   StreamSubscription<proto.Downstream>? _downstreamSubscription;
@@ -91,7 +92,7 @@ class MelvinClient {
     }
   }
 
-  Future<void> submitObjective(int objectiveId, Rect area) async {
+  Future<void> submitObjective(int objectiveId, Rect area, {bool scheduleOnly = false}) async {
     if (_pendingSubmit != null) throw Exception("Concurrent submit");
     _pendingSubmit = Completer();
     _pendingSubmitTimeout = Timer(Duration(seconds: 10), () {
@@ -102,16 +103,15 @@ class MelvinClient {
       }
     });
 
+    final areaMessage = proto.Upstream_ObjectiveArea(
+      objectiveId: objectiveId,
+      offsetX: area.topLeft.dx.toInt(),
+      offsetY: area.topLeft.dy.toInt(),
+      width: area.width.toInt(),
+      height: area.height.toInt(),
+    );
     await _protocolClient.send(
-      proto.Upstream(
-        submitObjective: proto.Upstream_SubmitObjective(
-          objectiveId: objectiveId,
-          offsetX: area.topLeft.dx.toInt(),
-          offsetY: area.topLeft.dy.toInt(),
-          width: area.width.toInt(),
-          height: area.height.toInt(),
-        ),
-      ),
+      scheduleOnly ? proto.Upstream(scheduleObjective: areaMessage) : proto.Upstream(submitObjective: areaMessage),
     );
 
     final objectiveIdFromResult = await _pendingSubmit!.future;
@@ -121,6 +121,9 @@ class MelvinClient {
   }
 
   void _onDownstreamMessage(proto.Downstream downstreamMessage) {
+    if(!downstreamMessage.hasImage()) {
+      debugPrint(downstreamMessage.toDebugString());
+    }
     if (downstreamMessage.hasImage()) {
       final imageMessage = downstreamMessage.image;
       final oldImage = mapImage.value;
@@ -181,13 +184,19 @@ class MelvinClient {
                       : null,
             ),
           );
-        } else if(task.hasSwitchState()) {
+        } else if (task.hasSwitchState()) {
+          tasks.add(SwitchStateTask(scheduledOn: scheduledOn, newState: _mapState(task.switchState)));
+        } else if (task.hasVelocityChange()) {
+          final positionsX = task.velocityChange.positionX;
+          final positionsY = task.velocityChange.positionY;
           tasks.add(
-            SwitchStateTask(scheduledOn: scheduledOn, newState: _mapState(task.switchState))
-          );
-        } else if(task.hasVelocityChange()) {
-          tasks.add(
-              ChangeVelocityTask(scheduledOn: scheduledOn)
+            ChangeVelocityTask(
+              scheduledOn: scheduledOn,
+              positions: List.generate(
+                positionsX.length,
+                (i) => Offset(positionsX[i].toDouble(), positionsY[i].toDouble()),
+              ),
+            ),
           );
         }
       }
@@ -215,10 +224,11 @@ class MelvinClient {
         return SatelliteState.none;
     }
   }
+
   Future<void> restartMelvinOb() async {
     final protocolClient = _protocolClient;
     if (protocolClient is SSHMelvinProtocolClient) {
-      await protocolClient.restartMelvinOb();
+      //await protocolClient.restartMelvinOb();
     }
   }
 
@@ -313,8 +323,8 @@ class SSHMelvinProtocolClient extends MelvinProtocolClient {
 
         sshClient = SSHClient(socket, username: 'root', onPasswordRequest: () => 'password');
         _sshClient = sshClient;
-      } catch (e, stack) {
-        debugPrintStack(label: "Could not connect to ssh", stackTrace: stack);
+      } catch (e) {
+        debugPrint("Could not connect to ssh: $e");
         return MelvinConnectionState.notConnected;
       }
     }
@@ -324,7 +334,7 @@ class SSHMelvinProtocolClient extends MelvinProtocolClient {
       channel = await sshClient.forwardLocal("localhost", 1337);
     } catch (e) {
       try {
-        await startMelvinOb();
+        //await startMelvinOb();
       } catch (e, stack) {
         debugPrintStack(label: "Could not start melvin", stackTrace: stack);
       }

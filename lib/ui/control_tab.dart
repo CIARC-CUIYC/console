@@ -1,6 +1,7 @@
 import 'package:ciarc_console/model/task.dart';
 import 'package:ciarc_console/service/melvin_client.dart';
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 
 import '../main.dart';
 import 'time_ago.dart';
@@ -13,6 +14,7 @@ class ControlTab extends StatefulWidget {
 }
 
 class _ControlTabState extends State<ControlTab> {
+  static final DateFormat _dateFormat = DateFormat.MEd("de_DE").add_Hm();
   final MelvinClient _melvinClient = getIt();
 
   @override
@@ -22,6 +24,7 @@ class _ControlTabState extends State<ControlTab> {
 
   @override
   Widget build(BuildContext context) {
+
     //return MapWidget(hightlightArea: Rect.fromLTRB(2087, 600, 2687, 1200));
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -63,16 +66,20 @@ class _ControlTabState extends State<ControlTab> {
                   }
                   final task = tasks[index];
                   final IconData icon;
+                  final String description;
                   if(task is TakeImageTask) {
                     icon = Icons.camera_alt;
+                    description = task.plannedPosition.toString();
                   } else if(task is SwitchStateTask) {
                     icon = Icons.swap_horiz;
+                    description = task.newState.toString();
                   } else if(task is ChangeVelocityTask) {
                     icon = Icons.rocket_launch;
+                    description = "Velocity Change";
                   } else {
                     throw Exception("Unreachable");
                   }
-                  return ListTile(leading: Icon(icon),);
+                  return ListTile(leading: Icon(icon), title: Text(description), subtitle: Text(_dateFormat.format(task.scheduledOn)));
                 },
 
                 separatorBuilder: (context, index) => Divider(indent: 5, height: 2, thickness: 1),

@@ -192,13 +192,25 @@ class _SubmitObjectivePageState extends State<_SubmitObjectivePage> {
         children: [
           Padding(
             padding: EdgeInsets.all(5),
-            child: ElevatedButton(
+            child: OutlinedButton(
               onPressed:
                   (_processing || _area == null)
                       ? null
                       : () {
-                        _submit();
+                        _submit(true);
                       },
+              child: _processing ? CircularProgressIndicator() : const Text('Schedule'),
+            ),
+          ),
+          Padding(
+            padding: EdgeInsets.all(5),
+            child: ElevatedButton(
+              onPressed:
+              (_processing || _area == null)
+                  ? null
+                  : () {
+                _submit(false);
+              },
               child: _processing ? CircularProgressIndicator() : const Text('Submit'),
             ),
           ),
@@ -207,7 +219,7 @@ class _SubmitObjectivePageState extends State<_SubmitObjectivePage> {
     );
   }
 
-  Future<void> _submit() async {
+  Future<void> _submit(bool scheduleOnly) async {
     if (_processing) return;
     setState(() {
       _processing = true;
@@ -215,7 +227,7 @@ class _SubmitObjectivePageState extends State<_SubmitObjectivePage> {
 
     bool success;
     try {
-      await _melvinClient.submitObjective(widget.objective.id!, _area!);
+      await _melvinClient.submitObjective(widget.objective.id!, _area!, scheduleOnly: scheduleOnly);
       success = true;
     } catch (e, stack) {
       debugPrintStack(label: "Submitting Objective failed", stackTrace: stack);

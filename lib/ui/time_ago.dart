@@ -63,7 +63,7 @@ class _TimeAgoState extends State<TimeAgo> {
     if (duration < const Duration(seconds: 15)) return "just now";
     if (duration < const Duration(minutes: 1)) return "${duration.inSeconds} s";
     if (duration < const Duration(minutes: 60)) return "${duration.inMinutes} min";
-    if (duration < const Duration(hours: 24)) return "${duration.inHours}:${duration.inMinutes % 60} h";
+    if (duration < const Duration(hours: 24)) return "${duration.inHours}:${(duration.inMinutes % 60).toString().padLeft(2, "0")} h";
     return "${duration.inDays},${(duration.inHours % 24) * (100.0 / 24.0)} days";
   }
 }
