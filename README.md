@@ -1,6 +1,6 @@
 # 🎛️ ciarc_console
-Welcome to the onboard software for **Team 03 — "Cache us if you can"** competing in the **2024/2025 ESA Computer in a Room Challenge**.
-This repository contains the console application for controlling MELVIN-OB from earth. It can be used for retrieving
+Welcome to the console implementation for **Team 03 — "Cache us if you can"** competing in the **2024/2025 ESA Computer in a Room Challenge**.
+Using the console application in this repository, MELVIN-OB can be controlled from "Earth." It can be used for retrieving
 telemetry including a live map and for controlling the scheduling of objectives and communication slots.
 
 ## 🗟 Code structure
